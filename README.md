@@ -125,7 +125,8 @@ A ready-to-demo dataset is seeded into the production D1 (and reproducible via
 [`seeds/demo.sql`](seeds/demo.sql)). It contains three companies, a sample
 project (`R03 — Tower A`), four documents (two drafts, one **in review** with an
 open task, one **closed** with full history), distribution-group memberships,
-and notifications.
+two transmittals, three correspondence items (Instruction / Technical Query /
+Notice with rule-based recipients), and notifications.
 
 Because users are seeded, the app skips first-run setup and goes straight to
 login. **Demo password for every account: `crorn-demo-2026`.**
