@@ -13,6 +13,7 @@ import { templates, workflows } from "./routes/workflows";
 import { transmittals, mail } from "./routes/correspondence";
 import { distribution } from "./routes/distribution";
 import { notifications } from "./routes/notifications";
+import { reports } from "./routes/reports";
 import { runSlaSweep } from "./scheduled";
 
 const app = new Hono<AppContext>();
@@ -34,6 +35,7 @@ app.route("/api/transmittals", transmittals);
 app.route("/api/mail", mail);
 app.route("/api/distribution-groups", distribution);
 app.route("/api/notifications", notifications);
+app.route("/api/reports", reports);
 
 // Manual trigger for the SLA sweep (Admin/DC) — same logic as the cron.
 app.post("/api/sla/run", async (c) => {

@@ -13,9 +13,9 @@
 import type { Env, Outcome } from "../types";
 import { DOC_STATUS } from "../types";
 import { newId } from "./crypto";
-import { first, all, run } from "./db";
+import { first, all, run, nextCounter } from "./db";
 import { audit, notifyRole, notifyUser } from "./notify";
-import { nextRevision } from "./naming";
+import { nextRevision, padSequence } from "./naming";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -272,9 +272,14 @@ export async function actOnStep(
   outcome: Outcome,
   comments: string | undefined,
 ): Promise<{ status: string }> {
-  const wf = await first<{ id: string; status: string; document_id: string }>(
+  const wf = await first<{
+    id: string;
+    status: string;
+    document_id: string;
+    template_id: string | null;
+  }>(
     env,
-    `SELECT id, status, document_id FROM workflows WHERE id = ?`,
+    `SELECT id, status, document_id, template_id FROM workflows WHERE id = ?`,
     workflowId,
   );
   if (!wf) throw new Error("Workflow not found");
@@ -313,20 +318,95 @@ export async function actOnStep(
     userId: user.id,
   });
 
-  switch (outcome) {
-    case "Approve":
-    case "Approve with Comments":
+  // Resolve configured routing for this step+outcome (else default behaviour).
+  const route = await resolveOutcome(env, wf.template_id, step.step_order, outcome);
+  switch (route.action) {
+    case "advance":
       await advance(env, workflowId, step.step_order);
       return { status: "advanced" };
-
-    case "Revise & Resubmit":
+    case "goto":
+      await gotoStep(env, workflowId, route.next_step_order ?? step.step_order + 1, step.step_order);
+      return { status: "routed" };
+    case "close":
+      await complete(env, workflowId);
+      return { status: "closed" };
+    case "return_to_originator":
       await returnForRevision(env, wf.document_id, workflowId, comments, user.id);
       return { status: "returned" };
-
-    case "Reject":
+    case "reject_archive":
       await reject(env, wf.document_id, workflowId, comments, user.id);
       return { status: "rejected" };
+    default:
+      await advance(env, workflowId, step.step_order);
+      return { status: "advanced" };
   }
+}
+
+interface OutcomeRoute {
+  action: "advance" | "goto" | "close" | "return_to_originator" | "reject_archive";
+  next_step_order: number | null;
+}
+
+/** Look up configured outcome routing; fall back to sensible defaults. */
+async function resolveOutcome(
+  env: Env,
+  templateId: string | null,
+  stepOrder: number,
+  outcome: Outcome,
+): Promise<OutcomeRoute> {
+  if (templateId) {
+    const tplStep = await first<{ id: string }>(
+      env,
+      `SELECT id FROM workflow_template_steps WHERE template_id = ? AND step_order = ?`,
+      templateId,
+      stepOrder,
+    );
+    if (tplStep) {
+      const cfg = await first<{ action: OutcomeRoute["action"]; next_step_order: number | null }>(
+        env,
+        `SELECT action, next_step_order FROM workflow_template_outcomes WHERE step_id = ? AND outcome = ?`,
+        tplStep.id,
+        outcome,
+      );
+      if (cfg) return { action: cfg.action, next_step_order: cfg.next_step_order };
+    }
+  }
+  // Defaults mirror the standard Aconex decision points.
+  if (outcome === "Revise & Resubmit") return { action: "return_to_originator", next_step_order: null };
+  if (outcome === "Reject") return { action: "reject_archive", next_step_order: null };
+  return { action: "advance", next_step_order: null };
+}
+
+/** Jump the workflow to a specific step (configurable branching). */
+async function gotoStep(
+  env: Env,
+  workflowId: string,
+  targetOrder: number,
+  fromOrder: number,
+): Promise<void> {
+  if (targetOrder <= fromOrder) {
+    // Backward routing: reopen the target and everything after it.
+    await run(
+      env,
+      `UPDATE workflow_steps
+         SET status = 'pending', outcome = NULL, due_date = NULL,
+             started_at = NULL, completed_at = NULL, last_reminder = NULL
+       WHERE workflow_id = ? AND step_order >= ?`,
+      workflowId,
+      targetOrder,
+    );
+  } else if (targetOrder > fromOrder + 1) {
+    // Forward skip: mark the bypassed steps as skipped.
+    await run(
+      env,
+      `UPDATE workflow_steps SET status = 'skipped'
+       WHERE workflow_id = ? AND step_order > ? AND step_order < ? AND status = 'pending'`,
+      workflowId,
+      fromOrder,
+      targetOrder,
+    );
+  }
+  await advance(env, workflowId, targetOrder - 1);
 }
 
 /** Revise & Resubmit: bump revision, return to originator, keep audit trail. */
@@ -429,4 +509,131 @@ async function reject(
     detail: comments ? `Rejected: ${comments}` : "Rejected and archived",
     userId,
   });
+}
+
+interface SubmitDoc {
+  id: string;
+  project_id: string;
+  project_code: string;
+  document_no: string;
+  current_revision: string;
+  doc_type_code: string | null;
+}
+
+/**
+ * Submit a document: validates a file is attached, auto-starts the workflow
+ * for its document type, auto-generates a transmittal and auto-distributes it
+ * to the matching distribution group — "no manual forwarding" (per scope §1/§2).
+ */
+export async function submitDocument(
+  env: Env,
+  documentId: string,
+  userId: string,
+): Promise<{ workflowId: string; transmittalId: string | null }> {
+  const doc = await first<SubmitDoc & { created_by: string | null }>(
+    env,
+    `SELECT d.id, d.project_id, d.document_no, d.current_revision, d.doc_type_code,
+            d.created_by, p.code AS project_code
+     FROM documents d JOIN projects p ON p.id = d.project_id WHERE d.id = ?`,
+    documentId,
+  );
+  if (!doc) throw new Error("Document not found");
+
+  const rev = await first<{ r2_key: string | null }>(
+    env,
+    `SELECT r2_key FROM revisions WHERE document_id = ? AND revision_code = ?`,
+    documentId,
+    doc.current_revision,
+  );
+  if (!rev || !rev.r2_key) {
+    throw new Error("Upload a file to the current revision before submitting");
+  }
+  const active = await first(
+    env,
+    `SELECT id FROM workflows WHERE document_id = ? AND status = 'active'`,
+    documentId,
+  );
+  if (active) throw new Error("Document already has an active workflow");
+
+  const workflowId = await startWorkflow(env, documentId, null, userId);
+  await run(env, `UPDATE documents SET submitted_at = datetime('now') WHERE id = ?`, documentId);
+  const transmittalId = await autoTransmittal(env, doc, userId);
+
+  await audit(env, {
+    entityType: "document",
+    entityId: documentId,
+    action: "submitted",
+    detail: `Submitted ${doc.document_no} (${doc.current_revision})`,
+    userId,
+  });
+  return { workflowId, transmittalId };
+}
+
+/** Auto-generate a transmittal for a submitted document and distribute it. */
+async function autoTransmittal(env: Env, doc: SubmitDoc, userId: string): Promise<string | null> {
+  // All distribution groups matching the document type (project-specific first).
+  const groups = await all<{ id: string }>(
+    env,
+    `SELECT id FROM distribution_groups
+     WHERE doc_type_code = ? AND (project_id = ? OR project_id IS NULL)
+     ORDER BY (project_id IS NULL)`,
+    doc.doc_type_code,
+    doc.project_id,
+  );
+
+  const seq = await nextCounter(env, `trn:${doc.project_id}`);
+  const transmittalNo = `${doc.project_code}-TRN-${padSequence(seq)}`;
+  const id = newId("trn");
+  await run(
+    env,
+    `INSERT INTO transmittals (id, project_id, transmittal_no, subject, from_user, group_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    id,
+    doc.project_id,
+    transmittalNo,
+    `Submittal: ${doc.document_no}`,
+    userId,
+    groups[0]?.id ?? null,
+  );
+  await run(
+    env,
+    `INSERT INTO transmittal_documents (id, transmittal_id, document_id, revision_code)
+     VALUES (?, ?, ?, ?)`,
+    newId("td"),
+    id,
+    doc.id,
+    doc.current_revision,
+  );
+  for (const g of groups) {
+    await autoDistribute(env, g.id, {
+      type: "received",
+      title: `Transmittal ${transmittalNo}`,
+      body: `Auto-generated for ${doc.document_no} (${doc.current_revision})`,
+      entityType: "transmittal",
+      entityId: id,
+    });
+  }
+  await audit(env, {
+    entityType: "transmittal",
+    entityId: id,
+    action: "auto_issued",
+    detail: `${transmittalNo} for ${doc.document_no}`,
+    userId,
+  });
+  return id;
+}
+
+/** Notify every member of a distribution group. */
+async function autoDistribute(
+  env: Env,
+  groupId: string | null,
+  n: { type: string; title: string; body?: string; entityType: string; entityId: string },
+): Promise<void> {
+  if (!groupId) return;
+  const members = await all<{ user_id: string }>(
+    env,
+    `SELECT user_id FROM distribution_members WHERE group_id = ?`,
+    groupId,
+  );
+  for (const m of members) await notifyUser(env, m.user_id, n);
 }

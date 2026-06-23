@@ -104,7 +104,7 @@ async function doSignup(){
 async function logout(){ await api('/auth/logout',{method:'POST'}); location.reload(); }
 
 /* ----------------------------- Shell ---------------------------- */
-var TABS = ['Dashboard','Projects','Documents','Tasks','Templates','Mail','Transmittals','Notifications'];
+var TABS = ['Dashboard','Projects','Documents','Tasks','Reports','Templates','Mail','Transmittals','Distribution','Admin','Notifications'];
 var current = 'Dashboard';
 function renderNav(unread){
   el('nav').innerHTML = TABS.map(function(t){
@@ -188,7 +188,8 @@ async function openDoc(id){
   var html = '<div class="card"><h2>'+esc(doc.document_no)+' — '+esc(doc.title)+'</h2>'+
     '<p class="muted">Status: '+esc(doc.workflow_status)+' · Revision: '+esc(doc.current_revision)+'</p>'+
     '<div class="row"><input type="file" id="dfile" style="max-width:280px"><button class="btn sm" onclick="upload(\\''+id+'\\')">Upload to '+esc(doc.current_revision)+'</button>'+
-    ' <button class="btn sm ghost" onclick="startWf(\\''+id+'\\')">Start workflow</button><span id="uerr" class="err"></span></div>'+
+    (canAct ? '' : ' <button class="btn sm" onclick="submitDoc(\\''+id+'\\')">Submit (auto-route)</button>')+
+    '<span id="uerr" class="err"></span></div>'+
     '<h3 style="font-size:13px;margin:14px 0 6px" class="muted">Revisions</h3><table><tr><th>Rev</th><th>File</th><th>Notes</th></tr>'+
     d.revisions.map(function(r){ var f = r.filename ? '<a href="/api/documents/'+id+'/revisions/'+r.revision_code+'/view" target="_blank">'+esc(r.filename)+'</a>' : '<span class="muted">— no file —</span>'; return '<tr><td>'+esc(r.revision_code)+'</td><td>'+f+'</td><td>'+esc(r.notes||'')+'</td></tr>'; }).join('')+'</table>';
   if (d.workflow) {
@@ -216,7 +217,7 @@ async function upload(id){
   var fd = new FormData(); fd.append('file', f);
   try { await api('/documents/'+id+'/upload',{method:'POST',body:fd}); openDoc(id); } catch(e){ el('uerr').textContent=e.message; }
 }
-async function startWf(id){ try { await api('/workflows/start',{method:'POST',body:{document_id:id}}); openDoc(id); } catch(e){ el('uerr').textContent=e.message; } }
+async function submitDoc(id){ try { var r = await api('/documents/'+id+'/submit',{method:'POST'}); alert('Submitted — workflow started'+(r.transmittalId?' and transmittal auto-issued to the distribution group.':'.')); openDoc(id); } catch(e){ el('uerr').textContent=e.message; } }
 async function act(wfid, outcome){
   var c = el('wfcomment') ? el('wfcomment').value : '';
   try { await api('/workflows/'+wfid+'/act',{method:'POST',body:{outcome:outcome,comments:c}}); go('Documents'); } catch(e){ alert(e.message); }
@@ -283,6 +284,66 @@ VIEWS['Notifications'] = async function(){
     d.notifications.map(function(n){ return '<tr><td>'+(n.read?'':'<span class="pill" style="border-color:var(--accent);color:var(--accent)">new</span>')+'</td><td>'+esc(n.title)+(n.body?'<br><span class="muted">'+esc(n.body)+'</span>':'')+'</td><td>'+esc(n.type)+'</td><td class="muted">'+esc((n.created_at||'').slice(0,16).replace('T',' '))+'</td></tr>'; }).join('')+'</table>':'<p class="muted">No notifications.</p>')+'</div>';
 };
 async function markRead(){ await api('/notifications/mark-read',{method:'POST'}); go('Notifications'); }
+
+VIEWS['Reports'] = async function(){
+  var o = await api('/reports/overview'); var sla = await api('/reports/sla'); var reg = await api('/reports/register');
+  var t = o.totals;
+  el('content').innerHTML =
+    '<div class="card"><h2>Overview</h2><div class="grid">'+
+     stat('Documents', t.documents||0)+ stat('Active workflows', t.active_workflows||0)+
+     stat('Overdue steps', t.overdue?('<span class="err">'+t.overdue+'</span>'):'0')+
+     stat('Transmittals', t.transmittals||0)+ stat('Correspondence', t.mail||0)+'</div>'+
+     '<p style="margin-top:10px">'+ o.by_status.map(function(s){return '<span class="pill">'+esc(s.workflow_status)+': '+s.n+'</span>';}).join(' ')+'</p></div>'+
+    '<div class="card"><h2>SLA — overdue ('+sla.overdue.length+') &amp; due soon ('+sla.due_soon.length+')</h2>'+
+     ((sla.overdue.length||sla.due_soon.length)?
+      '<table><tr><th>Document</th><th>Step</th><th>Role</th><th>Due</th><th>Days overdue</th></tr>'+
+      sla.overdue.concat(sla.due_soon).map(function(r){ var od=r.days_overdue>0?'<span class="err">'+r.days_overdue+'</span>':r.days_overdue; return '<tr><td style="font-family:monospace">'+esc(r.document_no)+'</td><td>'+esc(r.step_name)+'</td><td>'+esc(r.role)+'</td><td class="muted">'+esc((r.due_date||'').slice(0,10))+'</td><td>'+od+'</td></tr>'; }).join('')+'</table>'
+      : '<p class="muted">No open workflow steps.</p>')+'</div>'+
+    '<div class="card"><div class="row" style="justify-content:space-between"><h2>Document register ('+reg.count+')</h2><a class="btn ghost sm" href="/api/reports/register?format=csv">Download CSV</a></div>'+
+     '<table><tr><th>Number</th><th>Title</th><th>Disc</th><th>Type</th><th>Status</th><th>Rev</th><th>Workflow</th></tr>'+
+     reg.register.map(function(d){ return '<tr><td style="font-family:monospace">'+esc(d.document_no)+'</td><td>'+esc(d.title)+'</td><td>'+esc(d.discipline||'')+'</td><td>'+esc(d.type||'')+'</td><td>'+esc(d.status||'')+'</td><td>'+esc(d.revision||'')+'</td><td><span class="pill">'+esc(d.workflow_status)+'</span></td></tr>'; }).join('')+'</table></div>';
+};
+
+VIEWS['Distribution'] = async function(){
+  var d = await api('/distribution-groups');
+  var users = []; try { users = (await api('/users')).users; } catch(e){}
+  var userOpts = users.map(function(u){return [u.id, u.name+' ('+u.role+')'];});
+  el('content').innerHTML =
+    '<div class="card"><h2>New distribution group</h2><div class="grid">'+
+    '<div><label>Name</label><input id="gname" placeholder="SUB-Consultant-Team"></div>'+
+    '<div><label>Doc type</label>'+sel('gtype',[['','— any —']].concat(ref.doc_types.map(function(x){return [x.code,x.code];})))+'</div>'+
+    '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createGroup()">Create</button><span id="gerr" class="err"></span></div>'+
+    '<p class="muted" style="margin-top:8px">Groups matched by document type are auto-notified when a document is submitted.</p></div>'+
+    '<div class="card"><h2>Groups</h2>'+ d.groups.map(function(g){
+      return '<div class="card" style="background:var(--bg)"><b>'+esc(g.name)+'</b> <span class="pill">'+esc(g.doc_type_code||'any')+'</span> <span class="muted">'+g.member_count+' members</span>'+
+        '<div class="row" style="margin-top:8px">'+sel('mem_'+g.id, userOpts.length?userOpts:[['','(no users yet)']])+
+        '<button class="btn sm" onclick="addMember(\\''+g.id+'\\')">Add member</button><span id="ge_'+g.id+'" class="muted"></span></div></div>';
+    }).join('')+'</div>';
+};
+async function createGroup(){ try { await api('/distribution-groups',{method:'POST',body:{name:el('gname').value,doc_type_code:el('gtype').value||undefined}}); go('Distribution'); } catch(e){ el('gerr').textContent=e.message; } }
+async function addMember(gid){ var uid=el('mem_'+gid).value; if(!uid) return; try { await api('/distribution-groups/'+gid+'/members',{method:'POST',body:{user_id:uid}}); go('Distribution'); } catch(e){ el('ge_'+gid).textContent=e.message; } }
+
+VIEWS['Admin'] = async function(){
+  var u = await api('/users'); var co = await api('/companies'); var roles=(await api('/reference/roles')).roles;
+  el('content').innerHTML =
+    '<div class="card"><h2>Invite user</h2><div class="grid">'+
+    '<div><label>Name</label><input id="un"></div>'+
+    '<div><label>Email</label><input id="ue"></div>'+
+    '<div><label>Password</label><input id="up" type="password"></div>'+
+    '<div><label>Role</label>'+sel('ur', roles.map(function(r){return [r,r];}))+'</div>'+
+    '<div><label>Company</label>'+sel('uc',[['','—']].concat(co.companies.map(function(x){return [x.id,x.code];})))+'</div>'+
+    '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createUser()">Create user</button><span id="ue2" class="err"></span></div></div>'+
+    '<div class="card"><h2>Users</h2><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Company</th></tr>'+
+     u.users.map(function(x){return '<tr><td>'+esc(x.name)+'</td><td>'+esc(x.email)+'</td><td><span class="pill">'+esc(x.role)+'</span></td><td>'+esc(x.company_code||'')+'</td></tr>';}).join('')+'</table></div>'+
+    '<div class="card"><h2>Companies</h2><div class="grid">'+
+    '<div><label>Code</label><input id="cc" placeholder="ABC"></div>'+
+    '<div><label>Name</label><input id="cn"></div>'+
+    '<div><label>Type</label>'+sel('ct',[['Contractor','Contractor'],['Consultant','Consultant'],['Client','Client'],['Subcontractor','Subcontractor'],['Supplier','Supplier']])+'</div>'+
+    '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createCompany()">Add company</button><span id="ce" class="err"></span></div>'+
+    '<table style="margin-top:12px"><tr><th>Code</th><th>Name</th><th>Type</th></tr>'+co.companies.map(function(x){return '<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+'</td><td>'+esc(x.type)+'</td></tr>';}).join('')+'</table></div>';
+};
+async function createUser(){ try{ await api('/users',{method:'POST',body:{name:el('un').value,email:el('ue').value,password:el('up').value,role:el('ur').value,company_id:el('uc').value||undefined}}); go('Admin'); }catch(e){ el('ue2').textContent=e.message; } }
+async function createCompany(){ try{ await api('/companies',{method:'POST',body:{code:el('cc').value,name:el('cn').value,type:el('ct').value}}); go('Admin'); }catch(e){ el('ce').textContent=e.message; } }
 
 /* --------------------------- helpers ---------------------------- */
 function sel(id, pairs){ return '<select id="'+id+'">'+pairs.map(function(p){return '<option value="'+esc(p[0])+'">'+esc(p[1])+'</option>';}).join('')+'</select>'; }

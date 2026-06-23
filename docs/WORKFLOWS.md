@@ -52,12 +52,30 @@ Raise → Log → Consultant Review → Response → Closure
 
 ## Decision outcomes
 
-| Outcome | Effect |
+| Outcome | Default effect |
 | --- | --- |
 | Approve | Advance to next step; close workflow on the last step |
 | Approve with Comments | Advance + log the comment |
 | Revise & Resubmit | Bump revision (R0n → R0n+1), return to originator |
 | Reject | Archive document, close workflow |
+
+Each step+outcome is **configurable** (`POST /api/templates/:id/outcomes`) to one
+of: `advance`, `goto` a specific step (conditional branching / skip),
+`close`, `return_to_originator`, or `reject_archive`. Unconfigured outcomes use
+the defaults above.
+
+## Submission flow (auto-routing)
+
+`POST /api/documents/:id/submit` (after a file is uploaded to the current
+revision):
+
+1. Auto-starts the workflow template assigned to the document's type.
+2. Auto-generates a transmittal (`<PROJECT>-TRN-NNNNN`) bundling the current revision.
+3. Auto-distributes that transmittal to every distribution group matching the
+   document type — no manual recipient selection.
+
+Seeded distribution groups: `SUB-Consultant-Team`, `SUB-Client-Review` (SUB),
+`RFI-Engineering-Team` (RFI), `CORR-Project-Stakeholders` (CORR).
 
 ## Status automation
 

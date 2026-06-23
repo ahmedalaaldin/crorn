@@ -5,6 +5,7 @@ import { newId } from "../lib/crypto";
 import { first, all, run, nextCounter } from "../lib/db";
 import { audit } from "../lib/notify";
 import { formatDocumentNo, firstRevision } from "../lib/naming";
+import { submitDocument } from "../lib/workflow";
 import {
   readJson,
   requireString,
@@ -250,6 +251,18 @@ documents.post("/:id/upload", async (c) => {
     userId: user.id,
   });
   return c.json({ ok: true, revision: doc.current_revision, filename: file.name, key });
+});
+
+/* ------------------------------ Submit ---------------------------- */
+// Auto-starts the document-type workflow, auto-generates a transmittal and
+// auto-distributes it to the matching distribution group.
+documents.post("/:id/submit", async (c) => {
+  try {
+    const result = await submitDocument(c.env, c.req.param("id"), c.get("user").id);
+    return c.json({ ok: true, ...result }, 201);
+  } catch (err) {
+    throw badRequest((err as Error).message);
+  }
 });
 
 /* ----------------------- Download / view file --------------------- */

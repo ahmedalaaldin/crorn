@@ -73,6 +73,82 @@ templates.post("/", requireRole("Document Controller", "Project Manager"), async
   return c.json({ template: { id, name, type, doc_type_code: docType } }, 201);
 });
 
+templates.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  const t = await first(c.env, `SELECT * FROM workflow_templates WHERE id = ?`, id);
+  if (!t) throw notFound("Template not found");
+  const steps = await all(
+    c.env,
+    `SELECT id, step_order, name, role, action_type, sla_days
+     FROM workflow_template_steps WHERE template_id = ? ORDER BY step_order`,
+    id,
+  );
+  const outcomes = await all(
+    c.env,
+    `SELECT s.step_order, o.outcome, o.action, o.next_step_order
+     FROM workflow_template_outcomes o
+     JOIN workflow_template_steps s ON s.id = o.step_id
+     WHERE s.template_id = ? ORDER BY s.step_order`,
+    id,
+  );
+  return c.json({ template: t, steps, outcomes });
+});
+
+templates.patch("/:id", requireRole("Document Controller", "Project Manager"), async (c) => {
+  const id = c.req.param("id");
+  const body = await readJson(c);
+  const name = optionalString(body, "name");
+  const docType = optionalString(body, "doc_type_code")?.toUpperCase();
+  const active = typeof body.active === "boolean" ? (body.active ? 1 : 0) : undefined;
+  await run(
+    c.env,
+    `UPDATE workflow_templates
+       SET name = COALESCE(?, name), doc_type_code = COALESCE(?, doc_type_code),
+           active = COALESCE(?, active)
+     WHERE id = ?`,
+    name ?? null,
+    docType ?? null,
+    active ?? null,
+    id,
+  );
+  return c.json({ ok: true });
+});
+
+// Configure decision routing for a step (Aconex "Define Outcomes").
+templates.post("/:id/outcomes", requireRole("Document Controller", "Project Manager"), async (c) => {
+  const id = c.req.param("id");
+  const body = await readJson(c);
+  const stepOrder = typeof body.step_order === "number" ? body.step_order : NaN;
+  const outcome = requireString(body, "outcome");
+  const action = requireString(body, "action");
+  const nextStep = typeof body.next_step_order === "number" ? body.next_step_order : null;
+  if (!OUTCOMES.includes(outcome as Outcome)) {
+    throw badRequest(`outcome must be one of: ${OUTCOMES.join(", ")}`);
+  }
+  const valid = ["advance", "goto", "close", "return_to_originator", "reject_archive"];
+  if (!valid.includes(action)) throw badRequest(`action must be one of: ${valid.join(", ")}`);
+
+  const step = await first<{ id: string }>(
+    c.env,
+    `SELECT id FROM workflow_template_steps WHERE template_id = ? AND step_order = ?`,
+    id,
+    stepOrder,
+  );
+  if (!step) throw notFound("Template step not found");
+  await run(
+    c.env,
+    `INSERT INTO workflow_template_outcomes (id, step_id, outcome, action, next_step_order)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(step_id, outcome) DO UPDATE SET action = excluded.action, next_step_order = excluded.next_step_order`,
+    newId("wto"),
+    step.id,
+    outcome,
+    action,
+    nextStep,
+  );
+  return c.json({ ok: true });
+});
+
 /* ----------------------- Workflow instances ---------------------- */
 export const workflows = new Hono<AppContext>();
 workflows.use("*", requireAuth);

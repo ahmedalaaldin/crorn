@@ -38,9 +38,10 @@ src/
     notify.ts         Notifications + audit trail
     http.ts           JSON parsing, validation, error types
   middleware/auth.ts  requireAuth / requireRole
-  routes/             auth, admin, projects, reference, documents,
-                      workflows, correspondence, distribution, notifications, health
-migrations/           D1 schema (0001) + reference/standard-workflow seed (0002)
+  routes/             auth, admin, projects, reference, documents, workflows,
+                      correspondence, distribution, reports, notifications, health
+migrations/           D1 schema (0001), reference/standard-workflow seed (0002),
+                      configurable outcomes + distribution seed (0003)
 ```
 
 ## The workflow engine
@@ -56,6 +57,14 @@ The engine lives in [`src/lib/workflow.ts`](src/lib/workflow.ts).
   - `Revise & Resubmit` → bump the revision (R00 → R01 …), return to the
     originator, keep the full history
   - `Reject` → archive the document, close the workflow
+- **Configurable routing** (Aconex "Define Outcomes"): each step+outcome can be
+  configured to `advance`, `goto` a specific step (conditional branching),
+  `close`, `return_to_originator`, or `reject_archive` — defaults apply when
+  unconfigured (`POST /api/templates/:id/outcomes`).
+- **Submit → auto-route.** `POST /api/documents/:id/submit` starts the
+  document-type workflow, **auto-generates a transmittal**, and
+  **auto-distributes** it to the matching distribution group — no manual
+  forwarding.
 - **Status automation** mirrors Aconex: `Draft → Under Review → Closed`
   (or `Revise & Resubmit` / `Archived`).
 - **SLA + escalation.** Each actionable step gets a due date from its SLA days.
@@ -86,12 +95,13 @@ All routes are under `/api`. Auth is a session cookie (`crorn_session`) or
 | Users / Companies | `GET/POST /users`, `PATCH /users/:id`, `GET/POST /companies` |
 | Projects | `GET/POST /projects`, `GET /projects/:id` |
 | Reference | `GET /reference/{disciplines,doc-types,levels,statuses,roles,outcomes,escalation-rules}` |
-| Documents | `GET/POST /documents`, `GET /documents/:id`, `POST /documents/:id/upload`, `GET /documents/:id/revisions/:rev/{view,download}`, `POST /documents/:id/{lock,unlock}` |
-| Templates | `GET/POST /templates` |
+| Documents | `GET/POST /documents`, `GET /documents/:id`, `POST /documents/:id/upload`, **`POST /documents/:id/submit`**, `GET /documents/:id/revisions/:rev/{view,download}`, `POST /documents/:id/{lock,unlock}` |
+| Templates | `GET/POST /templates`, `GET/PATCH /templates/:id`, `POST /templates/:id/outcomes` |
 | Workflows | `POST /workflows/start`, `POST /workflows/:id/act`, `GET /workflows/tasks`, `GET /workflows`, `GET /workflows/:id` |
+| Reports | `GET /reports/overview`, `GET /reports/sla`, `GET /reports/register` (`?format=csv`, `?project_id=`) |
 | Transmittals | `GET/POST /transmittals`, `GET /transmittals/:id` |
 | Mail | `GET/POST /mail`, `GET /mail/:id` |
-| Distribution | `GET/POST /distribution-groups`, `POST /distribution-groups/:id/members` |
+| Distribution | `GET/POST /distribution-groups`, `GET /distribution-groups/:id`, `POST /distribution-groups/:id/members` |
 | Notifications | `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/mark-read` |
 | Health | `GET /health` (public; checks D1/R2/KV) |
 
