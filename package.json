@@ -11,7 +11,9 @@
     "cf-typegen": "wrangler types",
     "db:migrate": "wrangler d1 migrations apply crorn-dms-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply crorn-dms-db --local",
-    "db:seed": "wrangler d1 execute crorn-dms-db --remote --file=migrations/0002_seed.sql"
+    "db:seed": "wrangler d1 execute crorn-dms-db --remote --file=migrations/0002_seed.sql",
+    "seed:demo": "wrangler d1 execute crorn-dms-db --remote --file=seeds/demo.sql",
+    "seed:demo:local": "wrangler d1 execute crorn-dms-db --local --file=seeds/demo.sql"
   },
   "dependencies": {
     "hono": "^4.6.14"

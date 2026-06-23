@@ -118,6 +118,31 @@ npm run dev                     # wrangler dev (http://localhost:8787)
 
 Open <http://localhost:8787> and create the first admin account.
 
+## Demo data
+
+A ready-to-demo dataset is seeded into the production D1 (and reproducible via
+`npm run seed:demo` / `npm run seed:demo:local`, defined in
+[`seeds/demo.sql`](seeds/demo.sql)). It contains three companies, a sample
+project (`R03 — Tower A`), four documents (two drafts, one **in review** with an
+open task, one **closed** with full history), distribution-group memberships,
+and notifications.
+
+Because users are seeded, the app skips first-run setup and goes straight to
+login. **Demo password for every account: `crorn-demo-2026`.**
+
+| Email | Role | Sees in the demo |
+| --- | --- | --- |
+| `ahmed.alaaeldin@me.com` | Admin | everything; the approved-doc notification |
+| `qaqc@crorn.dev` | Contractor QA/QC | originates/submits documents |
+| `pm@crorn.dev` | Project Manager | approval tasks, correspondence |
+| `dc@crorn.dev` | Document Controller | logging/notify steps, admin |
+| `eng@crorn.dev` | Consultant Engineer | an **open review task** (Concrete Mix Design) |
+| `lead@crorn.dev` | Consultant Lead | senior approval tasks |
+| `client@crorn.dev` | Client | client review tasks |
+
+> ⚠️ Demo accounts use a shared, public password — rotate or remove them
+> (`DELETE FROM users WHERE email LIKE '%@crorn.dev'`) before real production use.
+
 ## Deployment (Cloudflare, via GitHub Actions)
 
 Deploys run automatically on push to `main` (see
