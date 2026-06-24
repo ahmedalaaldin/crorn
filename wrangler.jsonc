@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "crorn-dms",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "account_id": "52b7f1b2600c3ff4726e38c956963ca4",
+  // Publish to the workers.dev URL for now so deploys are self-contained.
+  "workers_dev": true,
+  // Custom domain (www.crorn.com) is currently held by the `crorn-parked`
+  // Worker. Once that binding is removed in the Cloudflare dashboard, restore
+  // the route below and redeploy — wrangler will create the DNS record + TLS.
+  // "routes": [{ "pattern": "www.crorn.com", "custom_domain": true }],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+  // D1 — relational metadata (documents, workflows, audit, reference data)
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crorn-dms-db",
+      "database_id": "cece9381-0a1b-4fa4-ac7b-92bf28fb8c48",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // R2 — document file storage (revisions)
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "crorn-dms-files"
+    }
+  ],
+  // KV — auth sessions and lightweight cache
+  "kv_namespaces": [
+    {
+      "binding": "SESSIONS",
+      "id": "2c34450104cc4e81b54aa7c307a57ff3"
+    },
+    {
+      "binding": "CACHE",
+      "id": "6163c9fccad041a3973ef67b5ab92d47"
+    }
+  ],
+  // Daily SLA / escalation sweep (06:00 UTC)
+  "triggers": {
+    "crons": ["0 6 * * *"]
+  }
+}
