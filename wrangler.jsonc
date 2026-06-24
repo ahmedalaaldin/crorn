@@ -4,6 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "account_id": "52b7f1b2600c3ff4726e38c956963ca4",
+  // Custom domain — binds the Worker to www.crorn.com. The crorn.com zone must
+  // be on this Cloudflare account; `wrangler deploy` creates/manages the DNS
+  // record and TLS certificate automatically.
+  "routes": [{ "pattern": "www.crorn.com", "custom_domain": true }],
   "observability": {
     "enabled": true
   },

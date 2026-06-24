@@ -167,6 +167,19 @@ To deploy manually instead:
 npx wrangler deploy
 ```
 
+### Custom domain (www.crorn.com)
+
+`wrangler.jsonc` binds the Worker to **www.crorn.com** via a Workers custom
+domain (`routes: [{ pattern: "www.crorn.com", custom_domain: true }]`). On the
+first deploy, Cloudflare provisions the DNS record and TLS certificate
+automatically — the `crorn.com` zone must be in this Cloudflare account.
+
+If `www.crorn.com` is currently pointed at the `crorn-parked` placeholder Worker
+(or has an existing DNS record), that binding/record must be removed in the
+dashboard first, otherwise the deploy reports a hostname conflict. To also serve
+the apex `crorn.com`, add a redirect rule (`crorn.com → www.crorn.com`) in the
+zone, or add `{ "pattern": "crorn.com", "custom_domain": true }` to `routes`.
+
 ## Provisioned Cloudflare resources
 
 | Resource | Name / id |
