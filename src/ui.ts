@@ -371,7 +371,7 @@ a:hover{ color:var(--link-d); text-decoration:underline; }
 </div>
 
 <script>
-var ref = {}, me = null, projects = [], currentProjectId = '', tplSteps = [], tplRoles = [];
+var ref = {}, me = null, projects = [], currentProjectId = '', tplSteps = [], tplRoles = [], docFStatus = '', docFType = '';
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function el(id){ return document.getElementById(id); }
 
@@ -522,7 +522,10 @@ async function removeProjectMember(pid,uid){ try{ await api('/projects/'+pid+'/m
 
 VIEWS['Documents'] = async function(){
   await loadProjects();
-  var d = await api('/documents'+(currentProjectId?('?project_id='+encodeURIComponent(currentProjectId)):''));
+  var qp=[]; if(currentProjectId) qp.push('project_id='+encodeURIComponent(currentProjectId));
+  if(docFStatus) qp.push('status='+encodeURIComponent(docFStatus));
+  if(docFType) qp.push('doc_type='+encodeURIComponent(docFType));
+  var d = await api('/documents'+(qp.length?('?'+qp.join('&')):''));
   if (!projects.length) { el('content').innerHTML='<div class="card"><p class="muted">You are not a member of any project yet. Ask an administrator to add you to a project.</p></div>'; return; }
   el('content').innerHTML =
     '<div class="card"><h2>Register document</h2><div class="grid">'+
@@ -534,7 +537,7 @@ VIEWS['Documents'] = async function(){
     '<div><label>Level</label>'+sel('dloc', [['','—']].concat(ref.levels.map(function(x){return [x.code,x.code+' '+x.name];})))+'</div>'+
     '<div><label>Package/Area</label><input id="darea" placeholder="FOUND"></div>'+
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createDoc()">Create</button><span id="derr" class="err"></span></div></div>'+
-    '<div class="card"><h2>Documents</h2><table><tr><th>Number</th><th>Title</th><th>Rev</th><th>Status</th><th></th></tr>'+
+    '<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-end"><h2 style="margin:0">Documents</h2>'+docFilterBar()+'</div><table style="margin-top:12px"><tr><th>Number</th><th>Title</th><th>Rev</th><th>Status</th><th></th></tr>'+
     d.documents.map(function(x){ return '<tr><td style="font-family:monospace">'+esc(x.document_no)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.current_revision)+'</td><td>'+statusPill(x.workflow_status)+'</td>'+
       '<td><button class="btn ghost sm" onclick="openDoc(\\''+x.id+'\\')">Open</button></td></tr>'; }).join('')+'</table></div>'+
     '<div id="docdetail"></div>';
@@ -662,10 +665,21 @@ VIEWS['Mail'] = async function(){
     '<div style="grid-column:1/-1"><label>Body</label><textarea id="mbody" rows="3"></textarea></div>'+
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="sendMail()">Send (auto-routed)</button><span id="merr" class="err"></span></div>'+
     '<p class="muted" style="margin-top:8px">Recipients are auto-selected from the routing rule for the mail type.</p></div>'+
-    '<div class="card"><h2>Correspondence log</h2><table><tr><th>No</th><th>Type</th><th>Subject</th><th>Date</th></tr>'+
-    byProjectCode(d.mail).map(function(m){ return '<tr><td style="font-family:monospace">'+esc(m.mail_no)+'</td><td>'+esc(m.type)+'</td><td>'+esc(m.subject)+'</td><td class="muted">'+esc((m.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+    '<div class="card"><h2>Correspondence log</h2><table><tr><th>No</th><th>Type</th><th>Subject</th><th>Date</th><th></th></tr>'+
+    byProjectCode(d.mail).map(function(m){ return '<tr><td style="font-family:monospace">'+esc(m.mail_no)+'</td><td>'+esc(m.type)+'</td><td>'+esc(m.subject)+'</td><td class="muted">'+esc((m.created_at||'').slice(0,10))+'</td><td><button class="btn ghost sm" onclick="openMail(\\''+m.id+'\\')">Open</button></td></tr>'; }).join('')+'</table></div>'+
+    '<div id="maildetail"></div>';
   if(currentProjectId && el('mproj')) el('mproj').value=currentProjectId;
 };
+async function openMail(id){
+  var d = await api('/mail/'+id); var m = d.mail;
+  var recips = (d.recipients||[]).map(function(r){ return '<span class="pill '+(r.kind==='cc'?'info':'role')+'">'+esc(r.kind.toUpperCase())+': '+esc(r.role||r.user_id||'')+'</span>'; }).join(' ') || '<span class="muted">—</span>';
+  el('maildetail').innerHTML = '<div class="card"><h2>'+esc(m.mail_no)+' — '+esc(m.type)+'</h2>'+
+    '<p><b>'+esc(m.subject)+'</b></p>'+
+    '<p style="white-space:pre-wrap">'+esc(m.body||'(no body)')+'</p>'+
+    '<h3 style="font-size:13px;margin:12px 0 6px" class="muted">Recipients</h3><div class="row">'+recips+'</div>'+
+    '<p class="muted" style="margin-top:10px">'+esc((m.created_at||'').slice(0,16).replace('T',' '))+'</p></div>';
+  el('maildetail').scrollIntoView({behavior:'smooth'});
+}
 async function sendMail(){
   try { var r = await api('/mail',{method:'POST',body:{project_id:el('mproj').value,type:el('mtype').value,subject:el('msubj').value,body:el('mbody').value}});
     alert('Sent '+r.mail.mail_no+' — routed to: '+(r.mail.routed_to.join(', ')||'(no rule)')); go('Mail'); }
@@ -681,10 +695,22 @@ VIEWS['Transmittals'] = async function(){
     '<label>Subject</label><input id="tsubj">'+
     '<label>Documents</label><select id="tdocs" multiple size="6">'+docs.documents.map(function(x){return '<option value="'+x.id+'">'+esc(x.document_no)+' — '+esc(x.title)+'</option>';}).join('')+'</select>'+
     '<div class="row" style="margin-top:10px"><button class="btn" onclick="createTrn()">Issue transmittal</button><span id="terr" class="err"></span></div></div>'+
-    '<div class="card"><h2>Transmittals</h2><table><tr><th>No</th><th>Subject</th><th>Docs</th><th>Date</th></tr>'+
-    byProjectCode(d.transmittals).map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.transmittal_no)+'</td><td>'+esc(t.subject)+'</td><td>'+t.document_count+'</td><td class="muted">'+esc((t.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+    '<div class="card"><h2>Transmittals</h2><table><tr><th>No</th><th>Subject</th><th>Docs</th><th>Date</th><th></th></tr>'+
+    byProjectCode(d.transmittals).map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.transmittal_no)+'</td><td>'+esc(t.subject)+'</td><td>'+t.document_count+'</td><td class="muted">'+esc((t.created_at||'').slice(0,10))+'</td><td><button class="btn ghost sm" onclick="openTrn(\\''+t.id+'\\')">Open</button></td></tr>'; }).join('')+'</table></div>'+
+    '<div id="trndetail"></div>';
   if(currentProjectId && el('tproj')) el('tproj').value=currentProjectId;
 };
+async function openTrn(id){
+  var d = await api('/transmittals/'+id); var t = d.transmittal;
+  el('trndetail').innerHTML = '<div class="card"><h2>'+esc(t.transmittal_no)+'</h2>'+
+    '<p><b>'+esc(t.subject)+'</b> <span class="pill">'+esc(t.status)+'</span></p>'+
+    '<h3 style="font-size:13px;margin:12px 0 6px" class="muted">Documents ('+(d.documents||[]).length+')</h3>'+
+    ((d.documents||[]).length? '<table><tr><th>Number</th><th>Title</th><th>Rev</th></tr>'+
+      d.documents.map(function(x){ return '<tr><td style="font-family:monospace">'+esc(x.document_no)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.revision_code)+'</td></tr>'; }).join('')+'</table>'
+      : '<p class="muted">No documents.</p>')+
+    '<p class="muted" style="margin-top:10px">'+esc((t.created_at||'').slice(0,16).replace('T',' '))+'</p></div>';
+  el('trndetail').scrollIntoView({behavior:'smooth'});
+}
 async function createTrn(){
   var ids = Array.prototype.slice.call(el('tdocs').selectedOptions).map(function(o){return o.value;});
   try { var r = await api('/transmittals',{method:'POST',body:{project_id:el('tproj').value,subject:el('tsubj').value,document_ids:ids}});
@@ -773,6 +799,14 @@ function pcls(s){ s=String(s==null?'':s).toLowerCase();
   if(/draft/.test(s)) return 'pill draft';
   return 'pill'; }
 function statusPill(s){ return '<span class="'+pcls(s)+'">'+esc(s)+'</span>'; }
+function docFilterBar(){
+  var statuses=['Draft','Under Review','Awaiting Response','Revise & Resubmit','Closed','Archived'];
+  var s='<select onchange="docFStatus=this.value;go(\\'Documents\\')" style="max-width:180px"><option value="">All statuses</option>';
+  statuses.forEach(function(x){ s+='<option'+(x===docFStatus?' selected':'')+'>'+esc(x)+'</option>'; }); s+='</select>';
+  var t='<select onchange="docFType=this.value;go(\\'Documents\\')" style="max-width:180px"><option value="">All types</option>';
+  (ref.doc_types||[]).forEach(function(x){ t+='<option value="'+esc(x.code)+'"'+(x.code===docFType?' selected':'')+'>'+esc(x.code+' '+x.name)+'</option>'; }); t+='</select>';
+  return '<div class="row" style="gap:6px">'+s+t+'</div>';
+}
 function sel(id, pairs){ return '<select id="'+id+'">'+pairs.map(function(p){return '<option value="'+esc(p[0])+'">'+esc(p[1])+'</option>';}).join('')+'</select>'; }
 async function loadProjects(){
   projects = (await api('/projects')).projects;
