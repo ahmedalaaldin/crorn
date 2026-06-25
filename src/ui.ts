@@ -555,8 +555,14 @@ async function openDoc(id){
   var d = await api('/documents/'+id);
   var doc = d.document;
   var canAct = d.workflow && d.workflow.status==='active';
+  var canLock = !doc.locked_by;
+  var canUnlock = doc.locked_by && (doc.locked_by===me.id || me.role==='Admin');
   var html = '<div class="card"><h2>'+esc(doc.document_no)+' — '+esc(doc.title)+'</h2>'+
     '<p class="muted">Status: '+esc(doc.workflow_status)+' · Revision: '+esc(doc.current_revision)+'</p>'+
+    '<div class="row" style="margin-bottom:8px">'+
+      (doc.locked_by ? '<span class="pill err">Locked</span>'+(canUnlock?'<button class="btn ghost sm" onclick="unlockDoc(\\''+id+'\\')">Unlock</button>':'<span class="muted">by another user</span>')
+                     : '<span class="pill ok">Unlocked</span><button class="btn ghost sm" onclick="lockDoc(\\''+id+'\\')">Lock for editing</button>')+
+    '</div>'+
     '<div class="row"><input type="file" id="dfile" style="max-width:280px"><button class="btn sm" onclick="upload(\\''+id+'\\')">Upload to '+esc(doc.current_revision)+'</button>'+
     (canAct ? '' : ' <button class="btn sm" onclick="submitDoc(\\''+id+'\\')">Submit (auto-route)</button>')+
     '<span id="uerr" class="err"></span></div>'+
@@ -588,6 +594,8 @@ async function upload(id){
   try { await api('/documents/'+id+'/upload',{method:'POST',body:fd}); openDoc(id); } catch(e){ el('uerr').textContent=e.message; }
 }
 async function submitDoc(id){ try { var r = await api('/documents/'+id+'/submit',{method:'POST'}); alert('Submitted — workflow started'+(r.transmittalId?' and transmittal auto-issued to the distribution group.':'.')); openDoc(id); } catch(e){ el('uerr').textContent=e.message; } }
+async function lockDoc(id){ try{ await api('/documents/'+id+'/lock',{method:'POST'}); openDoc(id); }catch(e){ alert(e.message); } }
+async function unlockDoc(id){ try{ await api('/documents/'+id+'/unlock',{method:'POST'}); openDoc(id); }catch(e){ alert(e.message); } }
 async function act(wfid, outcome){
   var c = el('wfcomment') ? el('wfcomment').value : '';
   try { await api('/workflows/'+wfid+'/act',{method:'POST',body:{outcome:outcome,comments:c}}); go('Documents'); } catch(e){ alert(e.message); }
@@ -779,8 +787,16 @@ VIEWS['Admin'] = async function(){
     '<div><label>Role</label>'+sel('ur', roles.map(function(r){return [r,r];}))+'</div>'+
     '<div><label>Company</label>'+sel('uc',[['','—']].concat(co.companies.map(function(x){return [x.id,x.code];})))+'</div>'+
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createUser()">Create user</button><span id="ue2" class="err"></span></div></div>'+
-    '<div class="card"><h2>Users</h2><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Company</th></tr>'+
-     u.users.map(function(x){return '<tr><td>'+esc(x.name)+'</td><td>'+esc(x.email)+'</td><td><span class="pill">'+esc(x.role)+'</span></td><td>'+esc(x.company_code||'')+'</td></tr>';}).join('')+'</table></div>'+
+    '<div class="card"><h2>Users</h2><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Company</th><th>Status</th></tr>'+
+     u.users.map(function(x){
+       var self = x.id===me.id;
+       var roleCell = self ? '<span class="pill">'+esc(x.role)+'</span>'
+         : '<select onchange="setUserRole(\\''+x.id+'\\',this.value)" style="max-width:180px">'+roles.map(function(r){return '<option'+(r===x.role?' selected':'')+'>'+esc(r)+'</option>';}).join('')+'</select>';
+       var statusCell = self ? '<span class="muted">you</span>'
+         : (x.active ? '<button class="btn ghost sm" onclick="setUserActive(\\''+x.id+'\\',false)">Deactivate</button>'
+                     : '<span class="pill err">inactive</span> <button class="btn ghost sm" onclick="setUserActive(\\''+x.id+'\\',true)">Activate</button>');
+       return '<tr><td>'+esc(x.name)+'</td><td>'+esc(x.email)+'</td><td>'+roleCell+'</td><td>'+esc(x.company_code||'')+'</td><td>'+statusCell+'</td></tr>';
+     }).join('')+'</table></div>'+
     '<div class="card"><h2>Companies</h2><div class="grid">'+
     '<div><label>Code</label><input id="cc" placeholder="ABC"></div>'+
     '<div><label>Name</label><input id="cn"></div>'+
@@ -789,6 +805,8 @@ VIEWS['Admin'] = async function(){
     '<table style="margin-top:12px"><tr><th>Code</th><th>Name</th><th>Type</th></tr>'+co.companies.map(function(x){return '<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+'</td><td>'+esc(x.type)+'</td></tr>';}).join('')+'</table></div>';
 };
 async function createUser(){ try{ await api('/users',{method:'POST',body:{name:el('un').value,email:el('ue').value,password:el('up').value,role:el('ur').value,company_id:el('uc').value||undefined}}); go('Admin'); }catch(e){ el('ue2').textContent=e.message; } }
+async function setUserRole(id,role){ try{ await api('/users/'+id,{method:'PATCH',body:{role:role}}); }catch(e){ alert(e.message); go('Admin'); } }
+async function setUserActive(id,active){ try{ await api('/users/'+id,{method:'PATCH',body:{active:active}}); go('Admin'); }catch(e){ alert(e.message); } }
 async function createCompany(){ try{ await api('/companies',{method:'POST',body:{code:el('cc').value,name:el('cn').value,type:el('ct').value}}); go('Admin'); }catch(e){ el('ce').textContent=e.message; } }
 
 /* --------------------------- helpers ---------------------------- */
