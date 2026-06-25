@@ -298,7 +298,7 @@ button.btn.ghost:hover{ background:var(--panel-alt); border-color:var(--muted); 
 /* ===================== KPI stats & utility text ===================== */
 .stat{
   font-size:28px; font-weight:700;
-  color:var(--nav);
+  color:#21384d;
   line-height:1.1; letter-spacing:-.5px;
 }
 .stat.ok{ color:var(--good); }
@@ -790,8 +790,8 @@ VIEWS['Admin'] = async function(){
   el('content').innerHTML =
     '<div class="card"><h2>Invite user</h2><div class="grid">'+
     '<div><label>Name</label><input id="un"></div>'+
-    '<div><label>Email</label><input id="ue"></div>'+
-    '<div><label>Password</label><input id="up" type="password"></div>'+
+    '<div><label>Email</label><input id="ue" autocomplete="off"></div>'+
+    '<div><label>Password</label><input id="up" type="password" autocomplete="new-password"></div>'+
     '<div><label>Role</label>'+sel('ur', roles.map(function(r){return [r,r];}))+'</div>'+
     '<div><label>Company</label>'+sel('uc',[['','—']].concat(co.companies.map(function(x){return [x.id,x.code];})))+'</div>'+
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createUser()">Create user</button><span id="ue2" class="err"></span></div></div>'+
@@ -827,9 +827,9 @@ function pcls(s){ s=String(s==null?'':s).toLowerCase();
 function statusPill(s){ return '<span class="'+pcls(s)+'">'+esc(s)+'</span>'; }
 function docFilterBar(){
   var statuses=['Draft','Under Review','Awaiting Response','Revise & Resubmit','Closed','Archived'];
-  var s='<select onchange="docFStatus=this.value;go(\\'Documents\\')" style="max-width:180px"><option value="">All statuses</option>';
+  var s='<select onchange="docFStatus=this.value;go(\\'Documents\\')" style="width:170px;flex:none"><option value="">All statuses</option>';
   statuses.forEach(function(x){ s+='<option'+(x===docFStatus?' selected':'')+'>'+esc(x)+'</option>'; }); s+='</select>';
-  var t='<select onchange="docFType=this.value;go(\\'Documents\\')" style="max-width:180px"><option value="">All types</option>';
+  var t='<select onchange="docFType=this.value;go(\\'Documents\\')" style="width:170px;flex:none"><option value="">All types</option>';
   (ref.doc_types||[]).forEach(function(x){ t+='<option value="'+esc(x.code)+'"'+(x.code===docFType?' selected':'')+'>'+esc(x.code+' '+x.name)+'</option>'; }); t+='</select>';
   return '<div class="row" style="gap:6px">'+s+t+'</div>';
 }
