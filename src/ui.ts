@@ -12,17 +12,31 @@ export const INDEX_HTML = `<!doctype html>
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
          background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:16px; padding:12px 20px;
-           background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; }
-  header h1 { font-size:16px; margin:0; letter-spacing:.5px; }
-  header h1 small { color:var(--muted); font-weight:400; }
-  nav { display:flex; gap:4px; flex-wrap:wrap; flex:1; }
-  nav button { background:none; border:none; color:var(--muted); padding:6px 10px; border-radius:6px;
+  .layout { display:flex; min-height:100vh; align-items:stretch; }
+  .sidebar { width:230px; flex:0 0 230px; background:var(--panel); border-right:1px solid var(--line);
+             display:flex; flex-direction:column; gap:6px; padding:14px 10px;
+             position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .brand { font-size:16px; font-weight:700; letter-spacing:.5px; padding:4px 10px 2px; }
+  .brand small { color:var(--muted); font-weight:400; }
+  .proj-switch { padding:4px 6px 8px; border-bottom:1px solid var(--line); }
+  .proj-switch label { margin:0 0 4px; }
+  nav { display:flex; flex-direction:column; gap:2px; margin-top:4px; }
+  nav button { display:flex; align-items:center; justify-content:space-between; text-align:left; width:100%;
+               background:none; border:none; color:var(--muted); padding:8px 10px; border-radius:6px;
                cursor:pointer; font-size:13px; }
-  nav button:hover { color:var(--text); background:#0b1220; }
-  nav button.active { color:var(--bg); background:var(--accent); }
+  nav button:hover { color:var(--text); background:var(--bg); }
+  nav button.active { color:var(--bg); background:var(--accent); font-weight:600; }
+  .side-foot { margin-top:auto; border-top:1px solid var(--line); padding:10px 8px 4px; font-size:12px; }
+  .side-foot .who { color:var(--muted); margin-bottom:8px; line-height:1.4; }
+  .content-area { flex:1; min-width:0; }
   .badge { background:var(--bad); color:#fff; border-radius:10px; padding:0 6px; font-size:11px; margin-left:4px; }
   main { max-width:1100px; margin:0 auto; padding:20px; }
+  @media (max-width:760px){
+    .layout { flex-direction:column; }
+    .sidebar { width:auto; flex:none; height:auto; position:static; border-right:none; border-bottom:1px solid var(--line); }
+    nav { flex-direction:row; flex-wrap:wrap; }
+    nav button { width:auto; }
+  }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
   .card h2 { margin:0 0 12px; font-size:15px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -49,17 +63,22 @@ export const INDEX_HTML = `<!doctype html>
 <body>
 <div id="auth" class="hide"></div>
 <div id="app" class="hide">
-  <header>
-    <h1>crorn <small>DMS</small></h1>
-    <nav id="nav"></nav>
-    <span id="who" class="muted"></span>
-    <button class="btn ghost sm" onclick="logout()">Logout</button>
-  </header>
-  <main id="content"></main>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">crorn <small>DMS</small></div>
+      <div class="proj-switch" id="projSwitch"></div>
+      <nav id="nav"></nav>
+      <div class="side-foot">
+        <div class="who" id="who"></div>
+        <button class="btn ghost sm" style="width:100%" onclick="logout()">Logout</button>
+      </div>
+    </aside>
+    <div class="content-area"><main id="content"></main></div>
+  </div>
 </div>
 
 <script>
-var ref = {}, me = null, projects = [];
+var ref = {}, me = null, projects = [], currentProjectId = '', tplSteps = [], tplRoles = [];
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function el(id){ return document.getElementById(id); }
 
@@ -109,9 +128,19 @@ var current = 'Dashboard';
 function renderNav(unread){
   el('nav').innerHTML = TABS.map(function(t){
     var b = unread && t==='Notifications' && unread>0 ? '<span class="badge">'+unread+'</span>' : '';
-    return '<button class="'+(t===current?'active':'')+'" onclick="go(\\''+t+'\\')">'+t+b+'</button>';
+    return '<button class="'+(t===current?'active':'')+'" onclick="go(\\''+t+'\\')"><span>'+t+'</span>'+b+'</button>';
   }).join('');
 }
+function renderProjectSwitch(){
+  var sw = el('projSwitch'); if(!sw) return;
+  var opts = '<option value="">All my projects</option>' + projects.map(function(p){
+    return '<option value="'+esc(p.id)+'"'+(p.id===currentProjectId?' selected':'')+'>'+esc(p.code+' — '+p.name)+'</option>';
+  }).join('');
+  sw.innerHTML = '<label>Project</label><select id="projsel" onchange="switchProject(this.value)">'+opts+'</select>';
+}
+function switchProject(id){ currentProjectId = id; tplSteps = []; renderProjectSwitch(); go(current); }
+function selectedProjectCode(){ if(!currentProjectId) return ''; var p = projects.filter(function(x){return x.id===currentProjectId;})[0]; return p?p.code:''; }
+function byProjectCode(list){ var code = selectedProjectCode(); return code ? list.filter(function(x){return x.project_code===code;}) : list; }
 async function go(tab){ current = tab; renderNav(); el('content').innerHTML='<p class="muted">Loading…</p>';
   try { await VIEWS[tab](); } catch(e){ el('content').innerHTML='<div class="card err">'+esc(e.message)+'</div>'; }
   refreshUnread();
@@ -139,25 +168,52 @@ VIEWS['Dashboard'] = async function(){
 function stat(label,val){ return '<div><div class="muted">'+label+'</div><div class="stat">'+val+'</div></div>'; }
 
 VIEWS['Projects'] = async function(){
-  var d = await api('/projects');
-  el('content').innerHTML =
-    '<div class="card"><h2>New project</h2><div class="grid">'+
-    '<div><label>Code</label><input id="pcode" placeholder="R03"></div>'+
-    '<div><label>Name</label><input id="pname" placeholder="Tower A"></div>'+
-    '<div><label>Client</label><input id="pclient"></div>'+
-    '<div><label>Location</label><input id="ploc"></div>'+
-    '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createProject()">Create</button><span id="perr" class="err"></span></div></div>'+
-    '<div class="card"><h2>Projects</h2><table><tr><th>Code</th><th>Name</th><th>Client</th><th>Docs</th></tr>'+
-    d.projects.map(function(p){ return '<tr><td>'+esc(p.code)+'</td><td>'+esc(p.name)+'</td><td>'+esc(p.client||'')+'</td><td>'+p.document_count+'</td></tr>'; }).join('')+'</table></div>';
+  await loadProjects();
+  var admin = me.role==='Admin';
+  var html = '';
+  if (admin) {
+    html += '<div class="card"><h2>New project</h2><div class="grid">'+
+      '<div><label>Code</label><input id="pcode" placeholder="R03"></div>'+
+      '<div><label>Name</label><input id="pname" placeholder="Tower A"></div>'+
+      '<div><label>Client</label><input id="pclient"></div>'+
+      '<div><label>Location</label><input id="ploc"></div>'+
+      '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createProject()">Create project</button><span id="perr" class="err"></span></div>'+
+      '<p class="muted" style="margin-top:8px">Each project is private. After creating it, add members to grant them access — they will only see this project\\'s documents, workflows, mail and reports.</p></div>';
+  }
+  html += '<div class="card"><h2>Projects</h2>'+
+    (projects.length? '<table><tr><th>Code</th><th>Name</th><th>Client</th><th>Docs</th><th>Members</th>'+(admin?'<th></th>':'')+'</tr>'+
+    projects.map(function(p){ return '<tr><td>'+esc(p.code)+'</td><td>'+esc(p.name)+'</td><td>'+esc(p.client||'')+'</td><td>'+p.document_count+'</td><td>'+(p.member_count==null?'—':p.member_count)+'</td>'+
+      (admin?'<td><button class="btn ghost sm" onclick="manageMembers(\\''+p.id+'\\')">Members</button></td>':'')+'</tr>'; }).join('')+'</table>'
+    : '<p class="muted">No projects yet'+(admin?' — create one above.':'. Ask an administrator to add you to a project.')+'</p>')+'</div>'+
+    '<div id="memberPanel"></div>';
+  el('content').innerHTML = html;
 };
 async function createProject(){
-  try { await api('/projects',{method:'POST',body:{code:el('pcode').value,name:el('pname').value,client:el('pclient').value,location:el('ploc').value}}); await loadProjects(); go('Projects'); }
+  try { await api('/projects',{method:'POST',body:{code:el('pcode').value,name:el('pname').value,client:el('pclient').value,location:el('ploc').value}}); go('Projects'); }
   catch(e){ el('perr').textContent=e.message; }
 }
+async function manageMembers(pid){
+  var m = await api('/projects/'+pid+'/members');
+  var us = []; try { us = (await api('/users')).users; } catch(e){}
+  var p = projects.filter(function(x){return x.id===pid;})[0] || {};
+  var have = {}; m.members.forEach(function(x){ have[x.user_id]=true; });
+  var addable = us.filter(function(u){ return !have[u.id]; });
+  el('memberPanel').innerHTML = '<div class="card"><h2>Members — '+esc(p.code||'')+' '+esc(p.name||'')+'</h2>'+
+    (m.members.length? '<table><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>'+
+      m.members.map(function(x){ return '<tr><td>'+esc(x.name)+'</td><td>'+esc(x.email)+'</td><td><span class="pill">'+esc(x.role)+'</span></td>'+
+        '<td><button class="btn ghost sm" onclick="removeProjectMember(\\''+pid+'\\',\\''+x.user_id+'\\')">Remove</button></td></tr>'; }).join('')+'</table>'
+      : '<p class="muted">No members yet.</p>')+
+    '<div class="row" style="margin-top:10px">'+sel('addmem', addable.length?addable.map(function(u){return [u.id,u.name+' ('+u.role+')'];}):[['','— all users already members —']])+
+    '<button class="btn sm" onclick="addProjectMember(\\''+pid+'\\')">Add member</button><span id="amerr" class="err"></span></div></div>';
+  el('memberPanel').scrollIntoView({behavior:'smooth'});
+}
+async function addProjectMember(pid){ var uid=el('addmem').value; if(!uid) return; try{ await api('/projects/'+pid+'/members',{method:'POST',body:{user_id:uid}}); await loadProjects(); manageMembers(pid); }catch(e){ el('amerr').textContent=e.message; } }
+async function removeProjectMember(pid,uid){ try{ await api('/projects/'+pid+'/members/'+uid,{method:'DELETE'}); await loadProjects(); manageMembers(pid); }catch(e){ alert(e.message); } }
 
 VIEWS['Documents'] = async function(){
   await loadProjects();
-  var d = await api('/documents');
+  var d = await api('/documents'+(currentProjectId?('?project_id='+encodeURIComponent(currentProjectId)):''));
+  if (!projects.length) { el('content').innerHTML='<div class="card"><p class="muted">You are not a member of any project yet. Ask an administrator to add you to a project.</p></div>'; return; }
   el('content').innerHTML =
     '<div class="card"><h2>Register document</h2><div class="grid">'+
     '<div><label>Project</label>'+sel('dproj', projects.map(function(p){return [p.id,p.code+' — '+p.name];}))+'</div>'+
@@ -172,6 +228,7 @@ VIEWS['Documents'] = async function(){
     d.documents.map(function(x){ return '<tr><td style="font-family:monospace">'+esc(x.document_no)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.current_revision)+'</td><td><span class="pill">'+esc(x.workflow_status)+'</span></td>'+
       '<td><button class="btn ghost sm" onclick="openDoc(\\''+x.id+'\\')">Open</button></td></tr>'; }).join('')+'</table></div>'+
     '<div id="docdetail"></div>';
+  if(currentProjectId && el('dproj')) el('dproj').value=currentProjectId;
 };
 async function createDoc(){
   try {
@@ -225,19 +282,63 @@ async function act(wfid, outcome){
 
 VIEWS['Tasks'] = async function(){
   var d = await api('/workflows/tasks');
+  var code = selectedProjectCode();
+  var tasks = code ? d.tasks.filter(function(t){ return (t.document_no||'').indexOf(code+'-')===0; }) : d.tasks;
   el('content').innerHTML = '<div class="card"><h2>My tasks ('+esc(me.role)+')</h2>'+
-    (d.tasks.length?'<table><tr><th>Document</th><th>Step</th><th>Action</th><th>Due</th><th></th></tr>'+
-    d.tasks.map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.document_no)+'</td><td>'+esc(t.step_name)+'</td><td>'+esc(t.action_type)+'</td><td class="muted">'+esc((t.due_date||'').slice(0,10))+'</td>'+
-      '<td><button class="btn ghost sm" onclick="openDoc(\\''+t.document_id+'\\');current=\\'Documents\\';renderNav();">Open</button></td></tr>'; }).join('')+'</table>':'<p class="muted">No pending tasks for your role.</p>')+
+    (tasks.length?'<table><tr><th>Document</th><th>Step</th><th>Action</th><th>Due</th><th></th></tr>'+
+    tasks.map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.document_no)+'</td><td>'+esc(t.step_name)+'</td><td>'+esc(t.action_type)+'</td><td class="muted">'+esc((t.due_date||'').slice(0,10))+'</td>'+
+      '<td><button class="btn ghost sm" onclick="openDoc(\\''+t.document_id+'\\');current=\\'Documents\\';renderNav();">Open</button></td></tr>'; }).join('')+'</table>':'<p class="muted">No pending tasks for your role'+(code?' in this project':'')+'.</p>')+
     '<div id="docdetail" style="margin-top:14px"></div></div>';
 };
 
+function roleSelectInline(i, val){ return '<select style="max-width:170px" onchange="tplSteps['+i+'].role=this.value">'+tplRoles.map(function(r){return '<option'+(r===val?' selected':'')+'>'+esc(r)+'</option>';}).join('')+'</select>'; }
+function actionSelectInline(i, val){ return '<select style="max-width:110px" onchange="tplSteps['+i+'].action_type=this.value">'+['Review','Approve','Notify'].map(function(a){return '<option'+(a===val?' selected':'')+'>'+a+'</option>';}).join('')+'</select>'; }
+function renderTplSteps(){ var box=el('tplStepsBox'); if(!box) return;
+  box.innerHTML = tplSteps.length ? tplSteps.map(function(s,i){
+    return '<div class="row" style="margin-bottom:6px"><span class="muted" style="width:18px">'+(i+1)+'</span>'+
+      '<input style="max-width:200px" placeholder="Step name" value="'+esc(s.name)+'" onchange="tplSteps['+i+'].name=this.value">'+
+      roleSelectInline(i,s.role)+actionSelectInline(i,s.action_type)+
+      '<input type="number" min="0" step="0.5" style="max-width:80px" value="'+s.sla_days+'" title="SLA days" onchange="tplSteps['+i+'].sla_days=parseFloat(this.value)||0">'+
+      '<button class="btn ghost sm" onclick="removeTplStep('+i+')">✕</button></div>';
+  }).join('') : '<p class="muted">No steps yet — add at least one.</p>';
+}
+function addTplStep(){ tplSteps.push({name:'',role:(tplRoles[0]||'Contractor QA/QC'),action_type:'Review',sla_days:2}); renderTplSteps(); }
+function removeTplStep(i){ tplSteps.splice(i,1); renderTplSteps(); }
+async function createTemplate(){
+  if(!tplSteps.length){ el('terr2').textContent='Add at least one step'; return; }
+  var body={name:el('tname').value,type:el('ttype').value,doc_type_code:el('tdoc').value||undefined,steps:tplSteps};
+  if(currentProjectId) body.project_id=currentProjectId;
+  try{ await api('/templates',{method:'POST',body:body}); tplSteps=[]; go('Templates'); }catch(e){ el('terr2').textContent=e.message; }
+}
 VIEWS['Templates'] = async function(){
-  var d = await api('/templates');
-  el('content').innerHTML = '<div class="card"><h2>Workflow templates</h2>'+
-    d.templates.map(function(t){ return '<div class="card" style="background:var(--bg)"><b>'+esc(t.name)+'</b> <span class="pill">'+esc(t.type)+'</span> <span class="muted">'+esc(t.doc_type_code||'')+'</span>'+
-      '<table style="margin-top:8px"><tr><th>#</th><th>Step</th><th>Role</th><th>Action</th><th>SLA</th></tr>'+
-      t.steps.map(function(s){ return '<tr><td>'+s.step_order+'</td><td>'+esc(s.name)+'</td><td>'+esc(s.role)+'</td><td>'+esc(s.action_type)+'</td><td>'+s.sla_days+'d</td></tr>'; }).join('')+'</table></div>'; }).join('')+'</div>';
+  await loadProjects();
+  var d = await api('/templates'+(currentProjectId?('?project_id='+encodeURIComponent(currentProjectId)):''));
+  var canEdit = (me.role==='Admin'||me.role==='Document Controller'||me.role==='Project Manager');
+  if (canEdit && !tplRoles.length){ try{ tplRoles=(await api('/reference/roles')).roles; }catch(e){ tplRoles=[]; } }
+  var html='';
+  if (canEdit){
+    if (currentProjectId){
+      html += '<div class="card"><h2>New template — '+esc(selectedProjectCode())+'</h2><div class="grid">'+
+        '<div><label>Name</label><input id="tname" placeholder="SUB — Submittal Approval"></div>'+
+        '<div><label>Workflow for</label>'+sel('ttype',[['document','document'],['mail','mail']])+'</div>'+
+        '<div><label>Doc type</label>'+sel('tdoc',[['','— any —']].concat(ref.doc_types.map(function(x){return [x.code,x.code+' '+x.name];})))+'</div>'+
+        '</div><label style="margin-top:10px">Steps</label><div id="tplStepsBox"></div>'+
+        '<div class="row" style="margin-top:6px"><button class="btn ghost sm" onclick="addTplStep()">+ Add step</button>'+
+        '<button class="btn" onclick="createTemplate()">Create template</button><span id="terr2" class="err"></span></div>'+
+        '<p class="muted" style="margin-top:6px">This workflow belongs to '+esc(selectedProjectCode())+' only.</p></div>';
+    } else {
+      html += '<div class="card"><p class="muted">Select a project in the sidebar to add a workflow template for it.</p></div>';
+    }
+  }
+  html += '<div class="card"><h2>Workflow templates</h2>'+
+    (d.templates.length? d.templates.map(function(t){
+      var tag = t.project_id ? '<span class="pill" style="border-color:var(--accent);color:var(--accent)">'+esc(t.project_code||'project')+'</span>' : '<span class="pill">Standard · all projects</span>';
+      return '<div class="card" style="background:var(--bg)"><b>'+esc(t.name)+'</b> '+tag+' <span class="pill">'+esc(t.type)+'</span> <span class="muted">'+esc(t.doc_type_code||'')+'</span>'+
+        '<table style="margin-top:8px"><tr><th>#</th><th>Step</th><th>Role</th><th>Action</th><th>SLA</th></tr>'+
+        t.steps.map(function(s){ return '<tr><td>'+s.step_order+'</td><td>'+esc(s.name)+'</td><td>'+esc(s.role)+'</td><td>'+esc(s.action_type)+'</td><td>'+s.sla_days+'d</td></tr>'; }).join('')+'</table></div>';
+    }).join('') : '<p class="muted">No templates.</p>')+'</div>';
+  el('content').innerHTML = html;
+  if (canEdit && currentProjectId) renderTplSteps();
 };
 
 VIEWS['Mail'] = async function(){
@@ -252,7 +353,8 @@ VIEWS['Mail'] = async function(){
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="sendMail()">Send (auto-routed)</button><span id="merr" class="err"></span></div>'+
     '<p class="muted" style="margin-top:8px">Recipients are auto-selected from the routing rule for the mail type.</p></div>'+
     '<div class="card"><h2>Correspondence log</h2><table><tr><th>No</th><th>Type</th><th>Subject</th><th>Date</th></tr>'+
-    d.mail.map(function(m){ return '<tr><td style="font-family:monospace">'+esc(m.mail_no)+'</td><td>'+esc(m.type)+'</td><td>'+esc(m.subject)+'</td><td class="muted">'+esc((m.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+    byProjectCode(d.mail).map(function(m){ return '<tr><td style="font-family:monospace">'+esc(m.mail_no)+'</td><td>'+esc(m.type)+'</td><td>'+esc(m.subject)+'</td><td class="muted">'+esc((m.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+  if(currentProjectId && el('mproj')) el('mproj').value=currentProjectId;
 };
 async function sendMail(){
   try { var r = await api('/mail',{method:'POST',body:{project_id:el('mproj').value,type:el('mtype').value,subject:el('msubj').value,body:el('mbody').value}});
@@ -261,7 +363,8 @@ async function sendMail(){
 }
 
 VIEWS['Transmittals'] = async function(){
-  var d = await api('/transmittals'); var docs = await api('/documents');
+  await loadProjects();
+  var d = await api('/transmittals'); var docs = await api('/documents'+(currentProjectId?('?project_id='+encodeURIComponent(currentProjectId)):''));
   el('content').innerHTML =
     '<div class="card"><h2>New transmittal</h2>'+
     '<label>Project</label>'+sel('tproj', projects.map(function(p){return [p.id,p.code];}))+
@@ -269,7 +372,8 @@ VIEWS['Transmittals'] = async function(){
     '<label>Documents</label><select id="tdocs" multiple size="6">'+docs.documents.map(function(x){return '<option value="'+x.id+'">'+esc(x.document_no)+' — '+esc(x.title)+'</option>';}).join('')+'</select>'+
     '<div class="row" style="margin-top:10px"><button class="btn" onclick="createTrn()">Issue transmittal</button><span id="terr" class="err"></span></div></div>'+
     '<div class="card"><h2>Transmittals</h2><table><tr><th>No</th><th>Subject</th><th>Docs</th><th>Date</th></tr>'+
-    d.transmittals.map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.transmittal_no)+'</td><td>'+esc(t.subject)+'</td><td>'+t.document_count+'</td><td class="muted">'+esc((t.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+    byProjectCode(d.transmittals).map(function(t){ return '<tr><td style="font-family:monospace">'+esc(t.transmittal_no)+'</td><td>'+esc(t.subject)+'</td><td>'+t.document_count+'</td><td class="muted">'+esc((t.created_at||'').slice(0,10))+'</td></tr>'; }).join('')+'</table></div>';
+  if(currentProjectId && el('tproj')) el('tproj').value=currentProjectId;
 };
 async function createTrn(){
   var ids = Array.prototype.slice.call(el('tdocs').selectedOptions).map(function(o){return o.value;});
@@ -286,7 +390,9 @@ VIEWS['Notifications'] = async function(){
 async function markRead(){ await api('/notifications/mark-read',{method:'POST'}); go('Notifications'); }
 
 VIEWS['Reports'] = async function(){
-  var o = await api('/reports/overview'); var sla = await api('/reports/sla'); var reg = await api('/reports/register');
+  await loadProjects();
+  var pq = currentProjectId?('?project_id='+encodeURIComponent(currentProjectId)):'';
+  var o = await api('/reports/overview'); var sla = await api('/reports/sla'); var reg = await api('/reports/register'+pq);
   var t = o.totals;
   el('content').innerHTML =
     '<div class="card"><h2>Overview</h2><div class="grid">'+
@@ -299,7 +405,7 @@ VIEWS['Reports'] = async function(){
       '<table><tr><th>Document</th><th>Step</th><th>Role</th><th>Due</th><th>Days overdue</th></tr>'+
       sla.overdue.concat(sla.due_soon).map(function(r){ var od=r.days_overdue>0?'<span class="err">'+r.days_overdue+'</span>':r.days_overdue; return '<tr><td style="font-family:monospace">'+esc(r.document_no)+'</td><td>'+esc(r.step_name)+'</td><td>'+esc(r.role)+'</td><td class="muted">'+esc((r.due_date||'').slice(0,10))+'</td><td>'+od+'</td></tr>'; }).join('')+'</table>'
       : '<p class="muted">No open workflow steps.</p>')+'</div>'+
-    '<div class="card"><div class="row" style="justify-content:space-between"><h2>Document register ('+reg.count+')</h2><a class="btn ghost sm" href="/api/reports/register?format=csv">Download CSV</a></div>'+
+    '<div class="card"><div class="row" style="justify-content:space-between"><h2>Document register ('+reg.count+')</h2><a class="btn ghost sm" href="/api/reports/register?format=csv'+(currentProjectId?('&project_id='+encodeURIComponent(currentProjectId)):'')+'">Download CSV</a></div>'+
      '<table><tr><th>Number</th><th>Title</th><th>Disc</th><th>Type</th><th>Status</th><th>Rev</th><th>Workflow</th></tr>'+
      reg.register.map(function(d){ return '<tr><td style="font-family:monospace">'+esc(d.document_no)+'</td><td>'+esc(d.title)+'</td><td>'+esc(d.discipline||'')+'</td><td>'+esc(d.type||'')+'</td><td>'+esc(d.status||'')+'</td><td>'+esc(d.revision||'')+'</td><td><span class="pill">'+esc(d.workflow_status)+'</span></td></tr>'; }).join('')+'</table></div>';
 };
@@ -347,7 +453,12 @@ async function createCompany(){ try{ await api('/companies',{method:'POST',body:
 
 /* --------------------------- helpers ---------------------------- */
 function sel(id, pairs){ return '<select id="'+id+'">'+pairs.map(function(p){return '<option value="'+esc(p[0])+'">'+esc(p[1])+'</option>';}).join('')+'</select>'; }
-async function loadProjects(){ projects = (await api('/projects')).projects; }
+async function loadProjects(){
+  projects = (await api('/projects')).projects;
+  // If the selected project is no longer accessible, fall back to "all".
+  if (currentProjectId && !projects.some(function(p){return p.id===currentProjectId;})) currentProjectId = '';
+  renderProjectSwitch();
+}
 
 /* ------------------------------ boot ---------------------------- */
 async function boot(){
@@ -358,11 +469,12 @@ async function boot(){
     showAuth(bootstrap); return;
   }
   el('auth').classList.add('hide'); el('app').classList.remove('hide');
-  el('who').textContent = me.name + ' · ' + me.role;
+  el('who').innerHTML = esc(me.name) + '<br><span class="muted">' + esc(me.role) + '</span>';
   try { ref.disciplines = (await api('/reference/disciplines')).disciplines;
         ref.doc_types = (await api('/reference/doc-types')).doc_types;
         ref.statuses = (await api('/reference/statuses')).statuses;
         ref.levels = (await api('/reference/levels')).levels; } catch(e){}
+  try { await loadProjects(); } catch(e){}
   renderNav(); go('Dashboard');
 }
 boot();

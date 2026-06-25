@@ -6,6 +6,7 @@ import { first, all, run, nextCounter } from "../lib/db";
 import { audit } from "../lib/notify";
 import { formatDocumentNo, firstRevision } from "../lib/naming";
 import { submitDocument } from "../lib/workflow";
+import { accessibleProjectIds, assertProjectAccess } from "../lib/access";
 import {
   readJson,
   requireString,
@@ -35,6 +36,14 @@ documents.get("/", async (c) => {
   const docType = c.req.query("doc_type");
   const conditions: string[] = [];
   const params: unknown[] = [];
+  // Restrict to the caller's accessible projects (Admins: all).
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (projectId) await assertProjectAccess(c.env, c.get("user"), projectId);
+  if (ids !== null) {
+    if (ids.length === 0) return c.json({ documents: [] });
+    conditions.push(`d.project_id IN (${ids.map(() => "?").join(", ")})`);
+    params.push(...ids);
+  }
   if (projectId) {
     conditions.push("d.project_id = ?");
     params.push(projectId);
@@ -79,6 +88,7 @@ documents.post("/", async (c) => {
     projectId,
   );
   if (!project) throw badRequest("Unknown project_id");
+  await assertProjectAccess(c.env, c.get("user"), projectId);
 
   // Validate reference codes so the document number is well-formed.
   if (!(await first(c.env, `SELECT code FROM disciplines WHERE code = ?`, discipline)))
@@ -176,6 +186,7 @@ documents.get("/:id", async (c) => {
     id,
   );
   if (!doc) throw notFound("Document not found");
+  await assertProjectAccess(c.env, c.get("user"), (doc as { project_id: string }).project_id);
 
   const revisions = await all(
     c.env,
@@ -206,12 +217,13 @@ documents.get("/:id", async (c) => {
 documents.post("/:id/upload", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
-  const doc = await first<{ id: string; current_revision: string; locked_by: string | null }>(
+  const doc = await first<{ id: string; current_revision: string; locked_by: string | null; project_id: string }>(
     c.env,
-    `SELECT id, current_revision, locked_by FROM documents WHERE id = ?`,
+    `SELECT id, current_revision, locked_by, project_id FROM documents WHERE id = ?`,
     id,
   );
   if (!doc) throw notFound("Document not found");
+  await assertProjectAccess(c.env, user, doc.project_id);
   if (doc.locked_by && doc.locked_by !== user.id && user.role !== "Admin") {
     throw forbidden("Document is locked by another user");
   }
@@ -257,6 +269,13 @@ documents.post("/:id/upload", async (c) => {
 // Auto-starts the document-type workflow, auto-generates a transmittal and
 // auto-distributes it to the matching distribution group.
 documents.post("/:id/submit", async (c) => {
+  const doc = await first<{ project_id: string }>(
+    c.env,
+    `SELECT project_id FROM documents WHERE id = ?`,
+    c.req.param("id"),
+  );
+  if (!doc) throw notFound("Document not found");
+  await assertProjectAccess(c.env, c.get("user"), doc.project_id);
   try {
     const result = await submitDocument(c.env, c.req.param("id"), c.get("user").id);
     return c.json({ ok: true, ...result }, 201);
@@ -272,6 +291,13 @@ async function streamRevision(
 ) {
   const id = c.req.param("id");
   const rev = c.req.param("rev");
+  const docRow = await first<{ project_id: string }>(
+    c.env,
+    `SELECT project_id FROM documents WHERE id = ?`,
+    id,
+  );
+  if (!docRow) throw notFound("Document not found");
+  await assertProjectAccess(c.env, c.get("user"), docRow.project_id);
   const row = await first<{ r2_key: string | null; filename: string | null; content_type: string | null }>(
     c.env,
     `SELECT r2_key, filename, content_type FROM revisions WHERE document_id = ? AND revision_code = ?`,
@@ -297,12 +323,13 @@ documents.get("/:id/revisions/:rev/view", (c) => streamRevision(c, "inline"));
 documents.post("/:id/lock", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
-  const doc = await first<{ locked_by: string | null }>(
+  const doc = await first<{ locked_by: string | null; project_id: string }>(
     c.env,
-    `SELECT locked_by FROM documents WHERE id = ?`,
+    `SELECT locked_by, project_id FROM documents WHERE id = ?`,
     id,
   );
   if (!doc) throw notFound("Document not found");
+  await assertProjectAccess(c.env, user, doc.project_id);
   if (doc.locked_by && doc.locked_by !== user.id) throw conflict("Already locked by another user");
   await run(
     c.env,
@@ -316,12 +343,13 @@ documents.post("/:id/lock", async (c) => {
 documents.post("/:id/unlock", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
-  const doc = await first<{ locked_by: string | null }>(
+  const doc = await first<{ locked_by: string | null; project_id: string }>(
     c.env,
-    `SELECT locked_by FROM documents WHERE id = ?`,
+    `SELECT locked_by, project_id FROM documents WHERE id = ?`,
     id,
   );
   if (!doc) throw notFound("Document not found");
+  await assertProjectAccess(c.env, user, doc.project_id);
   if (doc.locked_by && doc.locked_by !== user.id && user.role !== "Admin") {
     throw forbidden("Only the lock owner or an Admin can unlock");
   }
