@@ -7,57 +7,349 @@ export const INDEX_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>crorn DMS</title>
 <style>
-  :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --text:#e2e8f0; --muted:#94a3b8;
-          --accent:#38bdf8; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-         background:var(--bg); color:var(--text); }
-  .layout { display:flex; min-height:100vh; align-items:stretch; }
-  .sidebar { width:230px; flex:0 0 230px; background:var(--panel); border-right:1px solid var(--line);
-             display:flex; flex-direction:column; gap:6px; padding:14px 10px;
-             position:sticky; top:0; height:100vh; overflow-y:auto; }
-  .brand { font-size:16px; font-weight:700; letter-spacing:.5px; padding:4px 10px 2px; }
-  .brand small { color:var(--muted); font-weight:400; }
-  .proj-switch { padding:4px 6px 8px; border-bottom:1px solid var(--line); }
-  .proj-switch label { margin:0 0 4px; }
-  nav { display:flex; flex-direction:column; gap:2px; margin-top:4px; }
-  nav button { display:flex; align-items:center; justify-content:space-between; text-align:left; width:100%;
-               background:none; border:none; color:var(--muted); padding:8px 10px; border-radius:6px;
-               cursor:pointer; font-size:13px; }
-  nav button:hover { color:var(--text); background:var(--bg); }
-  nav button.active { color:var(--bg); background:var(--accent); font-weight:600; }
-  .side-foot { margin-top:auto; border-top:1px solid var(--line); padding:10px 8px 4px; font-size:12px; }
-  .side-foot .who { color:var(--muted); margin-bottom:8px; line-height:1.4; }
-  .content-area { flex:1; min-width:0; }
-  .badge { background:var(--bad); color:#fff; border-radius:10px; padding:0 6px; font-size:11px; margin-left:4px; }
-  main { max-width:1100px; margin:0 auto; padding:20px; }
-  @media (max-width:760px){
-    .layout { flex-direction:column; }
-    .sidebar { width:auto; flex:none; height:auto; position:static; border-right:none; border-bottom:1px solid var(--line); }
-    nav { flex-direction:row; flex-wrap:wrap; }
-    nav button { width:auto; }
+:root{
+  /* ===== Aconex brand palette ===== */
+  --acx-orange:#EE7203;          /* signature Aconex orange */
+  --acx-orange-bright:#F58220;   /* lighter orange */
+  --acx-orange-d:#D9650A;        /* hover / active darker */
+  --acx-orange-soft:#FDF1E6;     /* light orange tint */
+  --acx-orange-soft-2:#FBE3CC;
+
+  --nav:#21384d;                 /* dark slate-blue module nav */
+  --nav-2:#1a2c3d;               /* deeper slate (foot / switch) */
+  --nav-line:#33485c;            /* nav dividers */
+  --nav-text:#c4d0db;            /* nav idle text */
+  --nav-text-dim:#8ba0b3;        /* nav secondary text */
+
+  --bg:#f4f5f7;                  /* light app background */
+  --panel:#ffffff;               /* white cards */
+  --panel-alt:#f7f8fa;           /* subtle fills */
+  --line:#dce0e6;                /* neutral borders */
+  --line-strong:#c7cdd6;         /* stronger borders */
+  --line-soft:#eef1f4;           /* table header / faint */
+  --head:#f2f4f7;                /* register header row */
+  --zebra:#fafbfc;               /* zebra striping */
+
+  --text:#1f2a36;                /* dark slate body text */
+  --text-2:#3d4b5a;              /* slightly softer */
+  --muted:#6b7785;               /* secondary grey */
+
+  --link:#0b6cbf;                /* hyperlink blue */
+  --link-d:#08538f;
+  --accent:var(--acx-orange);
+
+  --good:#1e8e3e;  --good-bg:#e6f4ea;  --good-bd:#bbdfc6;
+  --warn:#b5710a;  --warn-bg:#fbefd6;  --warn-bd:#efd49a;
+  --bad:#c5221f;   --bad-bg:#fce8e6;   --bad-bd:#f3c2c0;
+  --info-bg:#e7f1fb; --info-bd:#bfd9f2;
+  --draft-bg:#eef1f4; --draft-text:#5c6b7a;
+
+  --radius:4px;
+  --radius-sm:3px;
+  --shadow:0 1px 2px rgba(33,56,77,.10);
+  --shadow-card:0 1px 2px rgba(33,56,77,.08), 0 0 0 1px rgba(33,56,77,.02);
+}
+
+*{ box-sizing:border-box; }
+
+body{
+  margin:0;
+  font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ===================== Layout ===================== */
+.layout{ display:flex; min-height:100vh; }
+
+.sidebar{
+  width:236px; flex:0 0 236px;
+  background:var(--nav);
+  color:var(--nav-text);
+  border-right:1px solid var(--nav-2);
+  display:flex; flex-direction:column;
+  padding:0;
+  position:sticky; top:0; height:100vh; overflow-y:auto;
+}
+
+/* ===================== Brand ===================== */
+.brand{
+  font-size:18px; font-weight:800; letter-spacing:.3px;
+  color:#fff;
+  padding:16px 16px 14px;
+  border-bottom:1px solid var(--nav-line);
+  border-left:4px solid var(--acx-orange);
+  text-transform:lowercase;
+}
+.brand small{
+  color:var(--acx-orange);
+  font-weight:700; font-size:11px;
+  text-transform:uppercase; letter-spacing:1px;
+  margin-left:4px;
+}
+
+/* ===================== Project switcher ===================== */
+.proj-switch{
+  padding:12px 14px 14px;
+  border-bottom:1px solid var(--nav-line);
+  background:var(--nav-2);
+}
+.proj-switch label{
+  margin:0 0 5px;
+  color:var(--nav-text-dim);
+  text-transform:uppercase; font-size:10.5px; letter-spacing:.6px; font-weight:700;
+}
+.proj-switch select{
+  background:#fff; color:var(--text);
+  border:1px solid var(--nav-line);
+  border-radius:var(--radius-sm);
+  padding:7px 9px;
+}
+.proj-switch select:focus{ outline:none; border-color:var(--acx-orange); box-shadow:0 0 0 2px rgba(238,114,3,.25); }
+
+/* ===================== Left module nav ===================== */
+nav{ display:flex; flex-direction:column; gap:1px; padding:10px 8px 4px; }
+nav button{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  text-align:left; width:100%;
+  background:none; border:none;
+  border-left:3px solid transparent;
+  color:var(--nav-text);
+  padding:9px 12px 9px 13px;
+  border-radius:0 var(--radius) var(--radius) 0;
+  cursor:pointer;
+  font-size:13px; font-weight:500;
+  transition:background .12s ease, color .12s ease, border-color .12s ease;
+}
+nav button:hover{
+  color:#fff;
+  background:rgba(255,255,255,.07);
+}
+nav button.active{
+  color:#fff;
+  background:rgba(238,114,3,.16);
+  border-left:3px solid var(--acx-orange);
+  font-weight:700;
+}
+nav button.active:hover{ background:rgba(238,114,3,.22); }
+nav button.active span:first-child{ color:#fff; }
+
+/* ===================== Sidebar footer ===================== */
+.side-foot{
+  margin-top:auto;
+  border-top:1px solid var(--nav-line);
+  padding:14px;
+  font-size:12px;
+  background:var(--nav-2);
+}
+.side-foot .who{ color:#fff; line-height:1.45; margin-bottom:10px; font-weight:600; }
+.side-foot .who .muted{ color:var(--nav-text-dim); font-weight:400; }
+/* ghost Logout sitting in the dark foot stays readable */
+.side-foot button.ghost,
+.side-foot .btn.ghost{
+  background:transparent;
+  color:var(--nav-text);
+  border:1px solid var(--nav-line);
+}
+.side-foot button.ghost:hover,
+.side-foot .btn.ghost:hover{
+  background:rgba(255,255,255,.10);
+  color:#fff;
+  border-color:#4a5866;
+}
+
+/* ===================== Content ===================== */
+.content-area{ flex:1; min-width:0; }
+main{ max-width:1160px; margin:0 auto; padding:24px; }
+
+/* ===================== Notification badge ===================== */
+.badge{
+  background:var(--bad);
+  color:#fff;
+  border-radius:10px;
+  padding:1px 7px;
+  min-width:18px; text-align:center;
+  font-size:11px; font-weight:700; line-height:1.4;
+  margin-left:6px;
+}
+
+/* ===================== Cards ===================== */
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  padding:18px;
+  margin-bottom:18px;
+}
+.card h2{
+  margin:0 0 14px;
+  font-size:15px; font-weight:700;
+  color:var(--text);
+  padding-bottom:10px;
+  border-bottom:1px solid var(--line-soft);
+  letter-spacing:.2px;
+}
+
+/* ===================== Register table ===================== */
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+  border:1px solid var(--line);
+}
+th,td{
+  text-align:left;
+  padding:7px 10px;
+  border-bottom:1px solid var(--line-soft);
+  border-right:1px solid var(--line-soft);   /* crisp vertical column separators */
+  vertical-align:top;
+}
+th:last-child, td:last-child{ border-right:none; }
+thead th, th{
+  color:var(--text-2);
+  font-weight:700;
+  font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.4px;
+  background:var(--head);
+  border-bottom:2px solid var(--line-strong);
+  white-space:nowrap;
+}
+tbody tr:nth-child(even){ background:var(--zebra); }
+tbody tr:hover{ background:var(--acx-orange-soft); }
+td a{ color:var(--link); font-weight:600; }
+
+/* ===================== Form fields (light, on white cards) ===================== */
+input,select,textarea{
+  width:100%;
+  background:#fff;
+  border:1px solid var(--line-strong);
+  color:var(--text);
+  border-radius:var(--radius);
+  padding:8px 10px;
+  font:inherit;
+  transition:border-color .12s ease, box-shadow .12s ease;
+}
+input:focus,select:focus,textarea:focus{
+  outline:none;
+  border-color:var(--acx-orange);
+  box-shadow:0 0 0 3px rgba(238,114,3,.15);
+}
+input::placeholder,textarea::placeholder{ color:var(--muted); }
+label{
+  display:block;
+  font-size:12px; font-weight:600;
+  color:var(--text-2);
+  margin:10px 0 4px;
+}
+
+/* ===================== Buttons ===================== */
+button.btn{
+  background:var(--acx-orange);
+  color:#fff;
+  border:1px solid var(--acx-orange);
+  border-radius:var(--radius);
+  padding:8px 14px;
+  font-weight:600; font-size:13px;
+  cursor:pointer;
+  box-shadow:var(--shadow);
+  transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+button.btn:hover{ background:var(--acx-orange-bright); border-color:var(--acx-orange-bright); }
+button.btn:active{ background:var(--acx-orange-d); border-color:var(--acx-orange-d); }
+button.btn:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(238,114,3,.3); }
+button.btn.sm{ padding:4px 10px; font-size:12px; }
+
+/* secondary / outline */
+button.ghost{
+  background:#fff;
+  border:1px solid var(--line-strong);
+  color:var(--text-2);
+  box-shadow:none;
+}
+button.ghost:hover{ background:var(--panel-alt); border-color:var(--muted); color:var(--text); }
+/* ghost wins when combined with btn */
+button.btn.ghost{
+  background:#fff;
+  color:var(--text-2);
+  border:1px solid var(--line-strong);
+  box-shadow:none;
+}
+button.btn.ghost:hover{ background:var(--panel-alt); border-color:var(--muted); color:var(--text); }
+
+/* ===================== Layout helpers ===================== */
+.grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+.row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+/* ===================== Status pills ===================== */
+.pill{
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:11px;
+  font-size:11px; font-weight:600; line-height:1.5;
+  letter-spacing:.2px;
+  border:1px solid var(--line-strong);
+  background:var(--draft-bg);
+  color:var(--draft-text);
+  white-space:nowrap;
+}
+.pill.ok, .pill.good, .pill.closed{ background:var(--good-bg); color:var(--good); border-color:var(--good-bd); }
+.pill.warn, .pill.review, .pill.pending{ background:var(--warn-bg); color:var(--warn); border-color:var(--warn-bd); }
+.pill.err, .pill.bad, .pill.overdue, .pill.rejected{ background:var(--bad-bg); color:var(--bad); border-color:var(--bad-bd); }
+.pill.draft, .pill.muted{ background:var(--draft-bg); color:var(--draft-text); border-color:var(--line-strong); }
+.pill.info, .pill.role{ background:var(--info-bg); color:var(--link); border-color:var(--info-bd); }
+
+/* ===================== KPI stats & utility text ===================== */
+.stat{
+  font-size:28px; font-weight:700;
+  color:var(--nav);
+  line-height:1.1; letter-spacing:-.5px;
+}
+.stat.ok{ color:var(--good); }
+.stat.err{ color:var(--bad); }
+.stat.warn{ color:var(--warn); }
+.stat.muted{ color:var(--muted); }
+
+.muted{ color:var(--muted); }
+.err{ color:var(--bad); }
+.ok{ color:var(--good); }
+.hide{ display:none; }
+
+a{ color:var(--link); text-decoration:none; }
+a:hover{ color:var(--link-d); text-decoration:underline; }
+
+/* ===================== Mobile: sidebar collapses ===================== */
+@media (max-width:760px){
+  .layout{ flex-direction:column; }
+  .sidebar{
+    width:auto; flex:none; height:auto; position:static;
+    border-right:none; border-bottom:2px solid var(--acx-orange);
   }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
-  .card h2 { margin:0 0 12px; font-size:15px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-weight:600; }
-  input,select,textarea { width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
-                          border-radius:6px; padding:8px; font:inherit; }
-  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
-  button.btn { background:var(--accent); color:var(--bg); border:none; border-radius:6px; padding:8px 12px;
-               font-weight:600; cursor:pointer; }
-  button.btn.sm { padding:4px 8px; font-size:12px; }
-  button.ghost { background:none; border:1px solid var(--line); color:var(--text); }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; border:1px solid var(--line); }
-  .muted { color:var(--muted); }
-  .err { color:var(--bad); }
-  .ok { color:var(--good); }
-  .stat { font-size:24px; font-weight:700; }
-  .hide { display:none; }
-  a { color:var(--accent); }
+  .brand{ border-bottom:1px solid var(--nav-line); }
+  .proj-switch{ background:var(--nav-2); }
+  nav{ flex-direction:row; flex-wrap:wrap; gap:4px; padding:10px 12px; }
+  nav button{
+    width:auto;
+    border-left:none;
+    border-bottom:3px solid transparent;
+    border-radius:var(--radius-sm);
+  }
+  nav button.active{
+    border-left:none;
+    border-bottom:3px solid var(--acx-orange);
+    border-radius:var(--radius-sm);
+  }
+  .side-foot{
+    margin-top:0;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .side-foot .who{ margin-bottom:0; }
+  main{ padding:16px; }
+  table{ font-size:12.5px; }
+  th,td{ padding:6px 8px; }
+}
 </style>
 </head>
 <body>
@@ -70,6 +362,7 @@ export const INDEX_HTML = `<!doctype html>
       <nav id="nav"></nav>
       <div class="side-foot">
         <div class="who" id="who"></div>
+        <button class="btn ghost sm" style="width:100%;margin-bottom:6px" onclick="changePassword()">Change password</button>
         <button class="btn ghost sm" style="width:100%" onclick="logout()">Logout</button>
       </div>
     </aside>
@@ -121,12 +414,29 @@ async function doSignup(){
   catch(e){ el('aerr').textContent = e.message; }
 }
 async function logout(){ await api('/auth/logout',{method:'POST'}); location.reload(); }
+function changePassword(){
+  current=''; renderNav();
+  el('content').innerHTML = '<div class="card" style="max-width:440px"><h2>Change password</h2>'+
+    '<label>Current password</label><input id="cpc" type="password" autocomplete="current-password">'+
+    '<label>New password (min 8 characters)</label><input id="cpn" type="password" autocomplete="new-password">'+
+    '<label>Confirm new password</label><input id="cpn2" type="password" autocomplete="new-password">'+
+    '<div class="row" style="margin-top:14px"><button class="btn" onclick="doChangePassword()">Update password</button>'+
+    '<button class="btn ghost" onclick="go(\\'Dashboard\\')">Cancel</button><span id="cperr" class="err"></span></div></div>';
+}
+async function doChangePassword(){
+  var a=el('cpc').value, b=el('cpn').value, c2=el('cpn2').value;
+  if(b!==c2){ el('cperr').textContent='New passwords do not match'; return; }
+  try{ await api('/auth/change-password',{method:'POST',body:{current_password:a,new_password:b}}); alert('Password updated successfully.'); go('Dashboard'); }
+  catch(e){ el('cperr').textContent=e.message; }
+}
 
 /* ----------------------------- Shell ---------------------------- */
 var TABS = ['Dashboard','Projects','Documents','Tasks','Reports','Templates','Mail','Transmittals','Distribution','Admin','Notifications'];
 var current = 'Dashboard';
+function canManage(){ return !!(me && (me.role==='Admin'||me.role==='Document Controller'||me.role==='Project Manager')); }
+function visibleTabs(){ return TABS.filter(function(t){ if(t==='Admin') return canManage(); return true; }); }
 function renderNav(unread){
-  el('nav').innerHTML = TABS.map(function(t){
+  el('nav').innerHTML = visibleTabs().map(function(t){
     var b = unread && t==='Notifications' && unread>0 ? '<span class="badge">'+unread+'</span>' : '';
     return '<button class="'+(t===current?'active':'')+'" onclick="go(\\''+t+'\\')"><span>'+t+'</span>'+b+'</button>';
   }).join('');
@@ -141,7 +451,7 @@ function renderProjectSwitch(){
 function switchProject(id){ currentProjectId = id; tplSteps = []; renderProjectSwitch(); go(current); }
 function selectedProjectCode(){ if(!currentProjectId) return ''; var p = projects.filter(function(x){return x.id===currentProjectId;})[0]; return p?p.code:''; }
 function byProjectCode(list){ var code = selectedProjectCode(); return code ? list.filter(function(x){return x.project_code===code;}) : list; }
-async function go(tab){ current = tab; renderNav(); el('content').innerHTML='<p class="muted">Loading…</p>';
+async function go(tab){ if(tab==='Admin' && !canManage()) tab='Dashboard'; current = tab; renderNav(); el('content').innerHTML='<p class="muted">Loading…</p>';
   try { await VIEWS[tab](); } catch(e){ el('content').innerHTML='<div class="card err">'+esc(e.message)+'</div>'; }
   refreshUnread();
 }
@@ -225,7 +535,7 @@ VIEWS['Documents'] = async function(){
     '<div><label>Package/Area</label><input id="darea" placeholder="FOUND"></div>'+
     '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createDoc()">Create</button><span id="derr" class="err"></span></div></div>'+
     '<div class="card"><h2>Documents</h2><table><tr><th>Number</th><th>Title</th><th>Rev</th><th>Status</th><th></th></tr>'+
-    d.documents.map(function(x){ return '<tr><td style="font-family:monospace">'+esc(x.document_no)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.current_revision)+'</td><td><span class="pill">'+esc(x.workflow_status)+'</span></td>'+
+    d.documents.map(function(x){ return '<tr><td style="font-family:monospace">'+esc(x.document_no)+'</td><td>'+esc(x.title)+'</td><td>'+esc(x.current_revision)+'</td><td>'+statusPill(x.workflow_status)+'</td>'+
       '<td><button class="btn ghost sm" onclick="openDoc(\\''+x.id+'\\')">Open</button></td></tr>'; }).join('')+'</table></div>'+
     '<div id="docdetail"></div>';
   if(currentProjectId && el('dproj')) el('dproj').value=currentProjectId;
@@ -399,7 +709,7 @@ VIEWS['Reports'] = async function(){
      stat('Documents', t.documents||0)+ stat('Active workflows', t.active_workflows||0)+
      stat('Overdue steps', t.overdue?('<span class="err">'+t.overdue+'</span>'):'0')+
      stat('Transmittals', t.transmittals||0)+ stat('Correspondence', t.mail||0)+'</div>'+
-     '<p style="margin-top:10px">'+ o.by_status.map(function(s){return '<span class="pill">'+esc(s.workflow_status)+': '+s.n+'</span>';}).join(' ')+'</p></div>'+
+     '<p style="margin-top:10px">'+ o.by_status.map(function(s){return '<span class="'+pcls(s.workflow_status)+'">'+esc(s.workflow_status)+': '+s.n+'</span>';}).join(' ')+'</p></div>'+
     '<div class="card"><h2>SLA — overdue ('+sla.overdue.length+') &amp; due soon ('+sla.due_soon.length+')</h2>'+
      ((sla.overdue.length||sla.due_soon.length)?
       '<table><tr><th>Document</th><th>Step</th><th>Role</th><th>Due</th><th>Days overdue</th></tr>'+
@@ -407,24 +717,28 @@ VIEWS['Reports'] = async function(){
       : '<p class="muted">No open workflow steps.</p>')+'</div>'+
     '<div class="card"><div class="row" style="justify-content:space-between"><h2>Document register ('+reg.count+')</h2><a class="btn ghost sm" href="/api/reports/register?format=csv'+(currentProjectId?('&project_id='+encodeURIComponent(currentProjectId)):'')+'">Download CSV</a></div>'+
      '<table><tr><th>Number</th><th>Title</th><th>Disc</th><th>Type</th><th>Status</th><th>Rev</th><th>Workflow</th></tr>'+
-     reg.register.map(function(d){ return '<tr><td style="font-family:monospace">'+esc(d.document_no)+'</td><td>'+esc(d.title)+'</td><td>'+esc(d.discipline||'')+'</td><td>'+esc(d.type||'')+'</td><td>'+esc(d.status||'')+'</td><td>'+esc(d.revision||'')+'</td><td><span class="pill">'+esc(d.workflow_status)+'</span></td></tr>'; }).join('')+'</table></div>';
+     reg.register.map(function(d){ return '<tr><td style="font-family:monospace">'+esc(d.document_no)+'</td><td>'+esc(d.title)+'</td><td>'+esc(d.discipline||'')+'</td><td>'+esc(d.type||'')+'</td><td>'+esc(d.status||'')+'</td><td>'+esc(d.revision||'')+'</td><td>'+statusPill(d.workflow_status)+'</td></tr>'; }).join('')+'</table></div>';
 };
 
 VIEWS['Distribution'] = async function(){
   var d = await api('/distribution-groups');
-  var users = []; try { users = (await api('/users')).users; } catch(e){}
-  var userOpts = users.map(function(u){return [u.id, u.name+' ('+u.role+')'];});
-  el('content').innerHTML =
-    '<div class="card"><h2>New distribution group</h2><div class="grid">'+
-    '<div><label>Name</label><input id="gname" placeholder="SUB-Consultant-Team"></div>'+
-    '<div><label>Doc type</label>'+sel('gtype',[['','— any —']].concat(ref.doc_types.map(function(x){return [x.code,x.code];})))+'</div>'+
-    '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createGroup()">Create</button><span id="gerr" class="err"></span></div>'+
-    '<p class="muted" style="margin-top:8px">Groups matched by document type are auto-notified when a document is submitted.</p></div>'+
-    '<div class="card"><h2>Groups</h2>'+ d.groups.map(function(g){
-      return '<div class="card" style="background:var(--bg)"><b>'+esc(g.name)+'</b> <span class="pill">'+esc(g.doc_type_code||'any')+'</span> <span class="muted">'+g.member_count+' members</span>'+
-        '<div class="row" style="margin-top:8px">'+sel('mem_'+g.id, userOpts.length?userOpts:[['','(no users yet)']])+
-        '<button class="btn sm" onclick="addMember(\\''+g.id+'\\')">Add member</button><span id="ge_'+g.id+'" class="muted"></span></div></div>';
-    }).join('')+'</div>';
+  var manage = canManage();
+  var userOpts = [];
+  if (manage) { try { userOpts = (await api('/users')).users.map(function(u){return [u.id, u.name+' ('+u.role+')'];}); } catch(e){} }
+  var html = '';
+  if (manage) {
+    html += '<div class="card"><h2>New distribution group</h2><div class="grid">'+
+      '<div><label>Name</label><input id="gname" placeholder="SUB-Consultant-Team"></div>'+
+      '<div><label>Doc type</label>'+sel('gtype',[['','— any —']].concat(ref.doc_types.map(function(x){return [x.code,x.code];})))+'</div>'+
+      '</div><div class="row" style="margin-top:10px"><button class="btn" onclick="createGroup()">Create</button><span id="gerr" class="err"></span></div>'+
+      '<p class="muted" style="margin-top:8px">Groups matched by document type are auto-notified when a document is submitted.</p></div>';
+  }
+  html += '<div class="card"><h2>Distribution groups</h2>'+ (d.groups.length? d.groups.map(function(g){
+      return '<div class="card" style="background:var(--panel-alt)"><b>'+esc(g.name)+'</b> <span class="pill">'+esc(g.doc_type_code||'any')+'</span> <span class="muted">'+g.member_count+' members</span>'+
+        (manage ? '<div class="row" style="margin-top:8px">'+sel('mem_'+g.id, userOpts.length?userOpts:[['','(no users yet)']])+
+          '<button class="btn sm" onclick="addMember(\\''+g.id+'\\')">Add member</button><span id="ge_'+g.id+'" class="muted"></span></div>' : '')+'</div>';
+    }).join('') : '<p class="muted">No distribution groups.</p>')+'</div>';
+  el('content').innerHTML = html;
 };
 async function createGroup(){ try { await api('/distribution-groups',{method:'POST',body:{name:el('gname').value,doc_type_code:el('gtype').value||undefined}}); go('Distribution'); } catch(e){ el('gerr').textContent=e.message; } }
 async function addMember(gid){ var uid=el('mem_'+gid).value; if(!uid) return; try { await api('/distribution-groups/'+gid+'/members',{method:'POST',body:{user_id:uid}}); go('Distribution'); } catch(e){ el('ge_'+gid).textContent=e.message; } }
@@ -452,6 +766,13 @@ async function createUser(){ try{ await api('/users',{method:'POST',body:{name:e
 async function createCompany(){ try{ await api('/companies',{method:'POST',body:{code:el('cc').value,name:el('cn').value,type:el('ct').value}}); go('Admin'); }catch(e){ el('ce').textContent=e.message; } }
 
 /* --------------------------- helpers ---------------------------- */
+function pcls(s){ s=String(s==null?'':s).toLowerCase();
+  if(/closed|approved|complete/.test(s)) return 'pill ok';
+  if(/revise|resubmit|reject|overdue|archiv/.test(s)) return 'pill err';
+  if(/review|await|pending|progress/.test(s)) return 'pill review';
+  if(/draft/.test(s)) return 'pill draft';
+  return 'pill'; }
+function statusPill(s){ return '<span class="'+pcls(s)+'">'+esc(s)+'</span>'; }
 function sel(id, pairs){ return '<select id="'+id+'">'+pairs.map(function(p){return '<option value="'+esc(p[0])+'">'+esc(p[1])+'</option>';}).join('')+'</select>'; }
 async function loadProjects(){
   projects = (await api('/projects')).projects;
