@@ -15,11 +15,11 @@ export const INDEX_HTML = `<!doctype html>
   --acx-orange-soft:#FDF1E6;     /* light orange tint */
   --acx-orange-soft-2:#FBE3CC;
 
-  --nav:#21384d;                 /* dark slate-blue module nav */
-  --nav-2:#1a2c3d;               /* deeper slate (foot / switch) */
-  --nav-line:#33485c;            /* nav dividers */
-  --nav-text:#c4d0db;            /* nav idle text */
-  --nav-text-dim:#8ba0b3;        /* nav secondary text */
+  --nav:#ffffff;                 /* light module nav (Aconex app is light) */
+  --nav-2:#f4f6f8;               /* foot / switch panel */
+  --nav-line:#dfe3e8;            /* nav dividers */
+  --nav-text:#42505f;            /* nav idle text */
+  --nav-text-dim:#7a8794;        /* nav secondary text */
 
   --bg:#f4f5f7;                  /* light app background */
   --panel:#ffffff;               /* white cards */
@@ -68,7 +68,7 @@ body{
   width:236px; flex:0 0 236px;
   background:var(--nav);
   color:var(--nav-text);
-  border-right:1px solid var(--nav-2);
+  border-right:1px solid var(--line);
   display:flex; flex-direction:column;
   padding:0;
   position:sticky; top:0; height:100vh; overflow-y:auto;
@@ -76,19 +76,27 @@ body{
 
 /* ===================== Brand ===================== */
 .brand{
+  display:flex; align-items:center; gap:8px;
   font-size:18px; font-weight:800; letter-spacing:.3px;
-  color:#fff;
-  padding:16px 16px 14px;
+  color:#21384d;
+  padding:15px 16px 13px;
   border-bottom:1px solid var(--nav-line);
-  border-left:4px solid var(--acx-orange);
   text-transform:lowercase;
+}
+.brand .ring{
+  display:inline-block; width:15px; height:15px;
+  border:3.5px solid var(--acx-orange); border-radius:50%;
+  flex:none;
 }
 .brand small{
   color:var(--acx-orange);
   font-weight:700; font-size:11px;
   text-transform:uppercase; letter-spacing:1px;
-  margin-left:4px;
+  margin-left:2px;
 }
+.navlbl{ display:flex; align-items:center; gap:10px; }
+nav button svg{ width:16px; height:16px; flex:none; opacity:.85; }
+nav button.active svg{ opacity:1; }
 
 /* ===================== Project switcher ===================== */
 .proj-switch{
@@ -124,17 +132,16 @@ nav button{
   transition:background .12s ease, color .12s ease, border-color .12s ease;
 }
 nav button:hover{
-  color:#fff;
-  background:rgba(255,255,255,.07);
+  color:#1f2a36;
+  background:#eef1f4;
 }
 nav button.active{
-  color:#fff;
-  background:rgba(238,114,3,.16);
+  color:var(--acx-orange-d);
+  background:var(--acx-orange-soft);
   border-left:3px solid var(--acx-orange);
   font-weight:700;
 }
-nav button.active:hover{ background:rgba(238,114,3,.22); }
-nav button.active span:first-child{ color:#fff; }
+nav button.active:hover{ background:var(--acx-orange-soft-2); }
 
 /* ===================== Sidebar footer ===================== */
 .side-foot{
@@ -144,21 +151,8 @@ nav button.active span:first-child{ color:#fff; }
   font-size:12px;
   background:var(--nav-2);
 }
-.side-foot .who{ color:#fff; line-height:1.45; margin-bottom:10px; font-weight:600; }
+.side-foot .who{ color:#1f2a36; line-height:1.45; margin-bottom:10px; font-weight:600; }
 .side-foot .who .muted{ color:var(--nav-text-dim); font-weight:400; }
-/* ghost Logout sitting in the dark foot stays readable */
-.side-foot button.ghost,
-.side-foot .btn.ghost{
-  background:transparent;
-  color:var(--nav-text);
-  border:1px solid var(--nav-line);
-}
-.side-foot button.ghost:hover,
-.side-foot .btn.ghost:hover{
-  background:rgba(255,255,255,.10);
-  color:#fff;
-  border-color:#4a5866;
-}
 
 /* ===================== Content ===================== */
 .content-area{ flex:1; min-width:0; }
@@ -357,7 +351,7 @@ a:hover{ color:var(--link-d); text-decoration:underline; }
 <div id="app" class="hide">
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand">crorn <small>DMS</small></div>
+      <div class="brand"><span class="ring"></span>crorn <small>DMS</small></div>
       <div class="proj-switch" id="projSwitch"></div>
       <nav id="nav"></nav>
       <div class="side-foot">
@@ -435,10 +429,24 @@ var TABS = ['Dashboard','Projects','Documents','Tasks','Reports','Templates','Ma
 var current = 'Dashboard';
 function canManage(){ return !!(me && (me.role==='Admin'||me.role==='Document Controller'||me.role==='Project Manager')); }
 function visibleTabs(){ return TABS.filter(function(t){ if(t==='Admin') return canManage(); return true; }); }
+var NAV_ICONS = {
+  'Dashboard':'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  'Projects':'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  'Documents':'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  'Tasks':'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  'Reports':'<path d="M5 21V11"/><path d="M12 21V4"/><path d="M19 21v-7"/><path d="M3 21h18"/>',
+  'Templates':'<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  'Mail':'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  'Transmittals':'<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
+  'Distribution':'<circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 6.5a3 3 0 0 1 0 6"/><path d="M20.5 20a5 5 0 0 0-3.5-4.7"/>',
+  'Admin':'<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><circle cx="9" cy="6" r="2" fill="var(--nav)"/><circle cx="15" cy="12" r="2" fill="var(--nav)"/><circle cx="8" cy="18" r="2" fill="var(--nav)"/>',
+  'Notifications':'<path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8H3.5S6 15 6 9"/><path d="M10 21a2 2 0 0 0 4 0"/>'
+};
+function navIcon(t){ var p=NAV_ICONS[t]||'<circle cx="12" cy="12" r="8"/>'; return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
 function renderNav(unread){
   el('nav').innerHTML = visibleTabs().map(function(t){
     var b = unread && t==='Notifications' && unread>0 ? '<span class="badge">'+unread+'</span>' : '';
-    return '<button class="'+(t===current?'active':'')+'" onclick="go(\\''+t+'\\')"><span>'+t+'</span>'+b+'</button>';
+    return '<button class="'+(t===current?'active':'')+'" onclick="go(\\''+t+'\\')"><span class="navlbl">'+navIcon(t)+'<span>'+t+'</span></span>'+b+'</button>';
   }).join('');
 }
 function renderProjectSwitch(){
