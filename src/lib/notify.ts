@@ -1,13 +1,13 @@
 import type { Env } from "../types";
 import { newId } from "./crypto";
 import { run } from "./db";
-import { sendEmail } from "./email";
+import { sendEmail, buildNotificationEmail } from "./email";
 
 /** Mirror an in-app notification to the configured NOTIFY_EMAIL, if set. */
 async function emailNotification(env: Env, n: { type: string; title: string; body?: string }): Promise<void> {
   if (!env.EMAIL || !env.NOTIFY_EMAIL) return;
-  const text = `${n.title}\n\n${n.body ?? ""}\n\nType: ${n.type}\n— crorn DMS`;
-  await sendEmail(env, env.NOTIFY_EMAIL, `[crorn DMS] ${n.title}`, text);
+  const { html, text } = buildNotificationEmail(n);
+  await sendEmail(env, env.NOTIFY_EMAIL, `[crorn DMS] ${n.title}`, text, html);
 }
 
 interface NotifyInput {

@@ -3,7 +3,7 @@ import type { AppContext, AuthUser } from "../types";
 import { all, run } from "../lib/db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { accessibleProjectIds } from "../lib/access";
-import { sendEmail } from "../lib/email";
+import { sendEmail, buildNotificationEmail } from "../lib/email";
 
 export const notifications = new Hono<AppContext>();
 notifications.use("*", requireAuth);
@@ -13,13 +13,12 @@ notifications.use("*", requireAuth);
 notifications.post("/test-email", requireRole(), async (c) => {
   const to = c.env.NOTIFY_EMAIL;
   if (!to) return c.json({ error: "NOTIFY_EMAIL is not configured" }, 400);
-  const r = await sendEmail(
-    c.env,
-    to,
-    "[crorn DMS] Test notification email",
-    "This is a test of the crorn DMS outbound notification email flow.\n\n" +
-      "If you received this, notifications are being delivered to " + to + ".\n\n— crorn DMS",
-  );
+  const sample = buildNotificationEmail({
+    type: "review_required",
+    title: "Action required: Consultant Technical Review — R03-ABC-STR-SUB-GF-FOUND-00003-IFA-R00",
+    body: "Concrete Mix Design is awaiting your review. Review due within 2 day(s).\n\nThis is a test of the crorn DMS notification email template.",
+  });
+  const r = await sendEmail(c.env, to, "[crorn DMS] Test notification email", sample.text, sample.html);
   if (!r.ok) return c.json({ error: r.error || "send failed" }, 502);
   return c.json({ ok: true, to });
 });
