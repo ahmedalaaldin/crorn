@@ -1,38 +1,76 @@
 import { Hono } from "hono";
 import type { AppContext } from "../types";
-import { all } from "../lib/db";
+import { all, first } from "../lib/db";
 import { requireAuth } from "../middleware/auth";
+import { accessibleProjectIds, assertProjectAccess, projectScope } from "../lib/access";
 
 export const reports = new Hono<AppContext>();
 reports.use("*", requireAuth);
 
 /* ---------------------------- Overview ---------------------------- */
+// All figures are restricted to the caller's accessible projects (Admins: all).
 reports.get("/overview", async (c) => {
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (ids !== null && ids.length === 0) {
+    return c.json({
+      totals: { documents: 0, active_workflows: 0, overdue: 0, transmittals: 0, mail: 0 },
+      by_status: [],
+      by_discipline: [],
+      by_type: [],
+    });
+  }
+  const docW = projectScope(ids, "project_id", "WHERE"); // documents table directly
+  const joinW = projectScope(ids, "d.project_id", "AND"); // queries joining documents d
+
   const byStatus = await all<{ workflow_status: string; n: number }>(
     c.env,
-    `SELECT workflow_status, COUNT(*) n FROM documents GROUP BY workflow_status`,
+    `SELECT workflow_status, COUNT(*) n FROM documents${docW.sql} GROUP BY workflow_status`,
+    ...docW.params,
   );
   const byDiscipline = await all(
     c.env,
-    `SELECT discipline_code, COUNT(*) n FROM documents GROUP BY discipline_code ORDER BY n DESC`,
+    `SELECT discipline_code, COUNT(*) n FROM documents${docW.sql} GROUP BY discipline_code ORDER BY n DESC`,
+    ...docW.params,
   );
   const byType = await all(
     c.env,
-    `SELECT doc_type_code, COUNT(*) n FROM documents GROUP BY doc_type_code ORDER BY n DESC`,
+    `SELECT doc_type_code, COUNT(*) n FROM documents${docW.sql} GROUP BY doc_type_code ORDER BY n DESC`,
+    ...docW.params,
   );
-  const totals = await all<{ documents: number; active_workflows: number; overdue: number; transmittals: number; mail: number }>(
+
+  const documents = (await first<{ n: number }>(
     c.env,
-    `SELECT
-       (SELECT COUNT(*) FROM documents) AS documents,
-       (SELECT COUNT(*) FROM workflows WHERE status = 'active') AS active_workflows,
-       (SELECT COUNT(*) FROM workflow_steps ws JOIN workflows w ON w.id = ws.workflow_id
-         WHERE ws.status = 'in_progress' AND w.status = 'active'
-           AND ws.due_date IS NOT NULL AND julianday('now') > julianday(ws.due_date)) AS overdue,
-       (SELECT COUNT(*) FROM transmittals) AS transmittals,
-       (SELECT COUNT(*) FROM mail) AS mail`,
-  );
+    `SELECT COUNT(*) n FROM documents${docW.sql}`,
+    ...docW.params,
+  ))?.n ?? 0;
+  const activeWorkflows = (await first<{ n: number }>(
+    c.env,
+    `SELECT COUNT(*) n FROM workflows w JOIN documents d ON d.id = w.document_id
+     WHERE w.status = 'active'${joinW.sql}`,
+    ...joinW.params,
+  ))?.n ?? 0;
+  const overdue = (await first<{ n: number }>(
+    c.env,
+    `SELECT COUNT(*) n FROM workflow_steps ws
+       JOIN workflows w ON w.id = ws.workflow_id
+       JOIN documents d ON d.id = w.document_id
+     WHERE ws.status = 'in_progress' AND w.status = 'active'
+       AND ws.due_date IS NOT NULL AND julianday('now') > julianday(ws.due_date)${joinW.sql}`,
+    ...joinW.params,
+  ))?.n ?? 0;
+  const transmittals = (await first<{ n: number }>(
+    c.env,
+    `SELECT COUNT(*) n FROM transmittals${docW.sql}`,
+    ...docW.params,
+  ))?.n ?? 0;
+  const mailCount = (await first<{ n: number }>(
+    c.env,
+    `SELECT COUNT(*) n FROM mail${docW.sql}`,
+    ...docW.params,
+  ))?.n ?? 0;
+
   return c.json({
-    totals: totals[0] ?? {},
+    totals: { documents, active_workflows: activeWorkflows, overdue, transmittals, mail: mailCount },
     by_status: byStatus,
     by_discipline: byDiscipline,
     by_type: byType,
@@ -41,6 +79,9 @@ reports.get("/overview", async (c) => {
 
 /* ----------------------- SLA / overdue report --------------------- */
 reports.get("/sla", async (c) => {
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (ids !== null && ids.length === 0) return c.json({ overdue: [], due_soon: [], total_open: 0 });
+  const scope = projectScope(ids, "d.project_id", "AND");
   const rows = await all<{
     document_no: string;
     step_name: string;
@@ -54,8 +95,9 @@ reports.get("/sla", async (c) => {
      FROM workflow_steps ws
      JOIN workflows w ON w.id = ws.workflow_id
      JOIN documents d ON d.id = w.document_id
-     WHERE ws.status = 'in_progress' AND w.status = 'active' AND ws.due_date IS NOT NULL
+     WHERE ws.status = 'in_progress' AND w.status = 'active' AND ws.due_date IS NOT NULL${scope.sql}
      ORDER BY days_overdue DESC`,
+    ...scope.params,
   );
   const overdue = rows.filter((r) => r.days_overdue > 0);
   const due_soon = rows.filter((r) => r.days_overdue <= 0);
@@ -66,15 +108,29 @@ reports.get("/sla", async (c) => {
 // Aconex-style document register. ?project_id=... filters; ?format=csv exports.
 reports.get("/register", async (c) => {
   const projectId = c.req.query("project_id");
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (projectId) await assertProjectAccess(c.env, c.get("user"), projectId);
+  const conds: string[] = [];
+  const params: string[] = [];
+  if (projectId) {
+    conds.push("d.project_id = ?");
+    params.push(projectId);
+  }
+  if (ids !== null) {
+    if (ids.length === 0) return c.json({ register: [], count: 0 });
+    conds.push(`d.project_id IN (${ids.map(() => "?").join(", ")})`);
+    params.push(...ids);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const rows = await all<Record<string, string | number | null>>(
     c.env,
     `SELECT p.code AS project, d.document_no, d.title, d.discipline_code AS discipline,
             d.doc_type_code AS type, d.status_code AS status, d.current_revision AS revision,
             d.workflow_status, d.created_at, d.submitted_at
      FROM documents d JOIN projects p ON p.id = d.project_id
-     ${projectId ? "WHERE d.project_id = ?" : ""}
+     ${where}
      ORDER BY d.document_no`,
-    ...(projectId ? [projectId] : []),
+    ...params,
   );
 
   if (c.req.query("format") === "csv") {

@@ -4,18 +4,26 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "account_id": "52b7f1b2600c3ff4726e38c956963ca4",
-  // Publish to the workers.dev URL for now so deploys are self-contained.
+  // Keep the workers.dev URL alongside the custom domain.
   "workers_dev": true,
-  // Custom domain (www.crorn.com) is currently held by the `crorn-parked`
-  // Worker. Once that binding is removed in the Cloudflare dashboard, restore
-  // the route below and redeploy — wrangler will create the DNS record + TLS.
-  // "routes": [{ "pattern": "www.crorn.com", "custom_domain": true }],
+  // Custom domain: the `crorn-parked` hold on www.crorn.com has been removed,
+  // so wrangler provisions the DNS record + TLS certificate on deploy.
+  "routes": [
+    { "pattern": "crorn.com", "custom_domain": true },
+    { "pattern": "www.crorn.com", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   },
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "NOTIFY_EMAIL": "ahmed@zargina.com"
   },
+  // Outbound email via Email Routing's send binding. Restricted to the verified
+  // destination ahmed@zargina.com (free to send to verified destinations).
+  "send_email": [
+    { "name": "EMAIL", "destination_address": "ahmed@zargina.com" }
+  ],
   // D1 — relational metadata (documents, workflows, audit, reference data)
   "d1_databases": [
     {

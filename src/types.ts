@@ -5,6 +5,10 @@ export interface Env {
   SESSIONS: KVNamespace;
   CACHE: KVNamespace;
   ENVIRONMENT: string;
+  // Outbound email (Cloudflare Email Routing send binding). Optional so the
+  // app still runs if the binding/var are not configured.
+  EMAIL?: SendEmail;
+  NOTIFY_EMAIL?: string;
 }
 
 /** Authenticated user attached to the request context by the auth middleware. */

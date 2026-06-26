@@ -53,15 +53,16 @@ export async function startWorkflow(
   templateId: string | null,
   userId: string,
 ): Promise<string> {
-  const doc = await first<DocumentRow & { doc_type_code: string | null }>(
+  const doc = await first<DocumentRow & { doc_type_code: string | null; project_id: string }>(
     env,
-    `SELECT id, document_no, current_revision, created_by, doc_type_code
+    `SELECT id, document_no, current_revision, created_by, doc_type_code, project_id
      FROM documents WHERE id = ?`,
     documentId,
   );
   if (!doc) throw new Error("Document not found");
 
-  // Resolve template: explicit id, else the active template for the doc type.
+  // Resolve template: explicit id, else the active template for the doc type —
+  // preferring one that belongs to the document's project over a shared standard.
   const template = templateId
     ? await first<{ id: string }>(
         env,
@@ -71,8 +72,11 @@ export async function startWorkflow(
     : await first<{ id: string }>(
         env,
         `SELECT id FROM workflow_templates
-         WHERE doc_type_code = ? AND active = 1 ORDER BY created_at LIMIT 1`,
+         WHERE doc_type_code = ? AND active = 1
+           AND (project_id = ? OR project_id IS NULL)
+         ORDER BY (project_id IS NULL), created_at LIMIT 1`,
         doc.doc_type_code,
+        doc.project_id,
       );
   if (!template) throw new Error("No active workflow template for this document");
 
@@ -135,6 +139,84 @@ export async function startWorkflow(
   // Activate the first actionable step (auto-passing any leading Notify steps).
   await advance(env, workflowId, 0);
   return workflowId;
+}
+
+/**
+ * Give a newly-created project its own copies of the shared "standard"
+ * templates (Submittals / Letters / RFIs), including their steps and any
+ * configured decision outcomes. Each project then owns and customises its
+ * workflows independently of every other project.
+ */
+export async function seedProjectTemplates(env: Env, projectId: string): Promise<void> {
+  const standards = await all<{
+    id: string;
+    name: string;
+    type: string;
+    doc_type_code: string | null;
+  }>(
+    env,
+    `SELECT id, name, type, doc_type_code FROM workflow_templates
+     WHERE project_id IS NULL AND active = 1`,
+  );
+  for (const tpl of standards) {
+    const newTplId = newId("wt");
+    await run(
+      env,
+      `INSERT INTO workflow_templates (id, name, type, doc_type_code, active, project_id)
+       VALUES (?, ?, ?, ?, 1, ?)`,
+      newTplId,
+      tpl.name,
+      tpl.type,
+      tpl.doc_type_code,
+      projectId,
+    );
+    const steps = await all<{
+      id: string;
+      step_order: number;
+      name: string;
+      role: string;
+      action_type: string;
+      sla_days: number;
+    }>(
+      env,
+      `SELECT id, step_order, name, role, action_type, sla_days
+       FROM workflow_template_steps WHERE template_id = ? ORDER BY step_order`,
+      tpl.id,
+    );
+    for (const s of steps) {
+      const newStepId = newId("wts");
+      await run(
+        env,
+        `INSERT INTO workflow_template_steps
+           (id, template_id, step_order, name, role, action_type, sla_days)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        newStepId,
+        newTplId,
+        s.step_order,
+        s.name,
+        s.role,
+        s.action_type,
+        s.sla_days,
+      );
+      const outcomes = await all<{ outcome: string; action: string; next_step_order: number | null }>(
+        env,
+        `SELECT outcome, action, next_step_order FROM workflow_template_outcomes WHERE step_id = ?`,
+        s.id,
+      );
+      for (const o of outcomes) {
+        await run(
+          env,
+          `INSERT INTO workflow_template_outcomes (id, step_id, outcome, action, next_step_order)
+           VALUES (?, ?, ?, ?, ?)`,
+          newId("wto"),
+          newStepId,
+          o.outcome,
+          o.action,
+          o.next_step_order,
+        );
+      }
+    }
+  }
 }
 
 /**

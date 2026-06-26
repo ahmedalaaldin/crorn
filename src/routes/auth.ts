@@ -94,3 +94,25 @@ auth.get("/me", async (c) => {
   if (!user) throw unauthorized();
   return c.json({ user });
 });
+
+// Self-service password change for the signed-in user.
+auth.post("/change-password", async (c) => {
+  const token = extractToken(c.req.raw);
+  const user = token ? await resolveSession(c.env, token) : null;
+  if (!user) throw unauthorized();
+  const body = await readJson(c);
+  const current = requireString(body, "current_password");
+  const next = requireString(body, "new_password");
+  if (next.length < 8) throw badRequest("New password must be at least 8 characters");
+  const row = await first<{ password_hash: string }>(
+    c.env,
+    `SELECT password_hash FROM users WHERE id = ?`,
+    user.id,
+  );
+  if (!row || !(await verifyPassword(current, row.password_hash))) {
+    throw unauthorized("Current password is incorrect");
+  }
+  await run(c.env, `UPDATE users SET password_hash = ? WHERE id = ?`, await hashPassword(next), user.id);
+  await audit(c.env, { entityType: "auth", entityId: user.id, action: "password_changed", userId: user.id });
+  return c.json({ ok: true });
+});

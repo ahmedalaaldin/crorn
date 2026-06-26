@@ -12,18 +12,23 @@ import {
   notFound,
 } from "../lib/http";
 import { requireAuth } from "../middleware/auth";
+import { accessibleProjectIds, assertProjectAccess, projectScope } from "../lib/access";
 
 /* --------------------------- Transmittals ------------------------ */
 export const transmittals = new Hono<AppContext>();
 transmittals.use("*", requireAuth);
 
 transmittals.get("/", async (c) => {
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (ids !== null && ids.length === 0) return c.json({ transmittals: [] });
+  const scope = projectScope(ids, "t.project_id", "WHERE");
   const rows = await all(
     c.env,
     `SELECT t.id, t.transmittal_no, t.subject, t.status, t.created_at, p.code AS project_code,
             (SELECT COUNT(*) FROM transmittal_documents td WHERE td.transmittal_id = t.id) AS document_count
-     FROM transmittals t JOIN projects p ON p.id = t.project_id
+     FROM transmittals t JOIN projects p ON p.id = t.project_id${scope.sql}
      ORDER BY t.created_at DESC LIMIT 100`,
+    ...scope.params,
   );
   return c.json({ transmittals: rows });
 });
@@ -42,6 +47,7 @@ transmittals.post("/", async (c) => {
     projectId,
   );
   if (!project) throw badRequest("Unknown project_id");
+  await assertProjectAccess(c.env, c.get("user"), projectId);
 
   const seq = await nextCounter(c.env, `trn:${projectId}`);
   const transmittalNo = `${project.code}-TRN-${padSequence(seq)}`;
@@ -108,6 +114,7 @@ transmittals.get("/:id", async (c) => {
   const id = c.req.param("id");
   const t = await first(c.env, `SELECT * FROM transmittals WHERE id = ?`, id);
   if (!t) throw notFound("Transmittal not found");
+  await assertProjectAccess(c.env, c.get("user"), (t as { project_id: string }).project_id);
   const docs = await all(
     c.env,
     `SELECT td.document_id, td.revision_code, d.document_no, d.title
@@ -123,11 +130,15 @@ export const mail = new Hono<AppContext>();
 mail.use("*", requireAuth);
 
 mail.get("/", async (c) => {
+  const ids = await accessibleProjectIds(c.env, c.get("user"));
+  if (ids !== null && ids.length === 0) return c.json({ mail: [] });
+  const scope = projectScope(ids, "m.project_id", "WHERE");
   const rows = await all(
     c.env,
     `SELECT m.id, m.mail_no, m.type, m.subject, m.status, m.created_at, p.code AS project_code
-     FROM mail m JOIN projects p ON p.id = m.project_id
+     FROM mail m JOIN projects p ON p.id = m.project_id${scope.sql}
      ORDER BY m.created_at DESC LIMIT 100`,
+    ...scope.params,
   );
   return c.json({ mail: rows });
 });
@@ -148,6 +159,7 @@ mail.post("/", async (c) => {
     projectId,
   );
   if (!project) throw badRequest("Unknown project_id");
+  await assertProjectAccess(c.env, c.get("user"), projectId);
 
   const seq = await nextCounter(c.env, `mail:${projectId}`);
   const mailNo = `${project.code}-COR-${padSequence(seq)}`;
@@ -243,6 +255,7 @@ mail.get("/:id", async (c) => {
   const id = c.req.param("id");
   const m = await first(c.env, `SELECT * FROM mail WHERE id = ?`, id);
   if (!m) throw notFound("Mail not found");
+  await assertProjectAccess(c.env, c.get("user"), (m as { project_id: string }).project_id);
   const recipients = await all(
     c.env,
     `SELECT user_id, role, kind FROM mail_recipients WHERE mail_id = ?`,
