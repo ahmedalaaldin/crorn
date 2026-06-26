@@ -1,6 +1,14 @@
 import type { Env } from "../types";
 import { newId } from "./crypto";
 import { run } from "./db";
+import { sendEmail } from "./email";
+
+/** Mirror an in-app notification to the configured NOTIFY_EMAIL, if set. */
+async function emailNotification(env: Env, n: { type: string; title: string; body?: string }): Promise<void> {
+  if (!env.EMAIL || !env.NOTIFY_EMAIL) return;
+  const text = `${n.title}\n\n${n.body ?? ""}\n\nType: ${n.type}\n— crorn DMS`;
+  await sendEmail(env, env.NOTIFY_EMAIL, `[crorn DMS] ${n.title}`, text);
+}
 
 interface NotifyInput {
   type: string;
@@ -28,6 +36,7 @@ export async function notifyUser(
     n.entityType ?? null,
     n.entityId ?? null,
   );
+  await emailNotification(env, n);
 }
 
 /**
@@ -51,6 +60,7 @@ export async function notifyRole(
     n.entityType ?? null,
     n.entityId ?? null,
   );
+  await emailNotification(env, n);
 }
 
 /** Append an entry to the audit trail. */

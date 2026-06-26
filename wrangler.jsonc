@@ -16,8 +16,14 @@
     "enabled": true
   },
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "NOTIFY_EMAIL": "ahmed@zargina.com"
   },
+  // Outbound email via Email Routing's send binding. Restricted to the verified
+  // destination ahmed@zargina.com (free to send to verified destinations).
+  "send_email": [
+    { "name": "EMAIL", "destination_address": "ahmed@zargina.com" }
+  ],
   // D1 — relational metadata (documents, workflows, audit, reference data)
   "d1_databases": [
     {

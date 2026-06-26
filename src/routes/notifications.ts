@@ -1,11 +1,28 @@
 import { Hono } from "hono";
 import type { AppContext, AuthUser } from "../types";
 import { all, run } from "../lib/db";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireRole } from "../middleware/auth";
 import { accessibleProjectIds } from "../lib/access";
+import { sendEmail } from "../lib/email";
 
 export const notifications = new Hono<AppContext>();
 notifications.use("*", requireAuth);
+
+// Admin: send a test notification email to the configured NOTIFY_EMAIL to
+// verify the outbound email flow.
+notifications.post("/test-email", requireRole(), async (c) => {
+  const to = c.env.NOTIFY_EMAIL;
+  if (!to) return c.json({ error: "NOTIFY_EMAIL is not configured" }, 400);
+  const r = await sendEmail(
+    c.env,
+    to,
+    "[crorn DMS] Test notification email",
+    "This is a test of the crorn DMS outbound notification email flow.\n\n" +
+      "If you received this, notifications are being delivered to " + to + ".\n\n— crorn DMS",
+  );
+  if (!r.ok) return c.json({ error: r.error || "send failed" }, 502);
+  return c.json({ ok: true, to });
+});
 
 // Joins that resolve a notification's project via whatever entity it points at,
 // so role-targeted notifications can be scoped to the caller's projects.
